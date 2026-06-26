@@ -6,6 +6,14 @@ import * as path from 'path';
 import { Pipeline } from './pipeline/pipeline';
 import { loadConfig } from './config';
 
+// 单实例锁
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) { app.quit(); process.exit(0); }
+
+app.on('second-instance', () => {
+  if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+});
+
 // 代理 — Chromium Web Speech 需要翻墙
 app.commandLine.appendSwitch('proxy-server', 'http://127.0.0.1:7890');
 app.commandLine.appendSwitch('ignore-certificate-errors');
