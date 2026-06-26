@@ -51,6 +51,8 @@ async function deliver(text: string): Promise<string> {
 const PAGE = fs.readFileSync(path.join(__dirname, '..', 'speech.html'), 'utf-8');
 http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  const ts = new Date().toISOString().slice(11,23);
+  log(ts, req.method, req.url, req.headers['content-type']||'');
   if (req.method === 'GET' && req.url === '/status') {
     const ws = reg.list().map(i => `${i.name}: ${i.title.slice(0,30)}`).join(', ');
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -75,7 +77,10 @@ http.createServer((req, res) => {
   res.writeHead(404); res.end();
 }).listen(9877, '127.0.0.1', () => {
   log('HTTP :9877');
-  exec('start chrome --app=http://localhost:9877');
+  const chrome = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+  const chrome2 = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe';
+  const url = 'http://127.0.0.1:9877';
+  exec(`"${chrome}" --proxy-server=http://127.0.0.1:7890 --proxy-bypass-list="127.0.0.1;localhost" --app=${url}`);
 });
 
 // 窗口发现 + 实时监听

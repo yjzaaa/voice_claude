@@ -1,4 +1,22 @@
 HTTP :9877
 Ready, 5 wins, terminal (5)
 🪟 create: voice-claude
-🪟 create: voice-claude
+HTTP GET /
+HTTP GET /status
+HTTP GET /favicon.ico
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+[voice]→ terminal-5 你好
+[voice]→ terminal-5 你好现
+[voice]→ terminal-3 你好现在听
+[voice]→ terminal-5 你好现在
+[voice]→ terminal 你好现在听到我
+[voice]→ terminal-3 你好现在听到
+HTTP POST /send
+[voice]→ terminal-3 你好现在听到我说
+HTTP POST /send
+[voice]→ terminal-3 你好现在听到我说

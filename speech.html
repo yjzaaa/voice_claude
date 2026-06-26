@@ -11,39 +11,36 @@ button{background:#e94560;color:#fff;border:none;padding:10px 20px;font-size:.9e
 button.on{background:#0f3460}
 </style></head><body>
 <div class="c">
-<h2>🎤 语音 → Claude</h2>
-<div id="t"></div>
-<div id="s">就绪</div>
-<div id="info">加载中...</div>
+<h2>🎤 语音 → Claude</h2><div id="t"></div><div id="s">就绪</div><div id="info">加载中...</div>
 <button id="b" onclick="toggle()">🎤 开始监听</button>
 </div>
 <script>
 fetch('/status').then(r=>r.json()).then(j=>{document.getElementById('info').textContent='→ '+j.target+' ('+j.count+'个)'}).catch(()=>{});
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let r=null,g=false,last='';
+let r=null,g=false;
 
 function toggle(){g?stop():start()}
-function start(){
-  if(!SR)return;r=new SR();r.lang='zh-CN';r.continuous=true;r.interimResults=true;
+
+async function start(){
+  if(!SR)return;
+  try{await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){document.getElementById('s').textContent='❌ 麦克风';return}
+  r=new SR();r.lang='zh-CN';r.continuous=false;r.interimResults=true;
   r.onresult=e=>{
-    let i='',f='';for(let j=e.resultIndex;j<e.results.length;j++){let x=e.results[j][0].transcript;e.results[j].isFinal?f+=x:i+=x}
-    document.getElementById('t').textContent=i||f;
-    if(f&&f!==last){last=f;send(f)}
+    let t='';for(let j=0;j<e.results.length;j++)t+=e.results[j][0].transcript;
+    document.getElementById('t').textContent=t;
+    if(t){send(t);stop()}
   };
-  r.onerror=e=>{if(e.error==='no-speech')try{r.start()}catch(_){}}
-  r.onend=()=>{if(g)try{r.start()}catch(_){stop()}}
+  r.onerror=e=>{document.getElementById('s').textContent='⚠ '+e.error;stop()}
+  r.onend=()=>{stop()}
   r.start();g=true;
   document.getElementById('b').textContent='⏹ 停止';document.getElementById('b').className='on';
-  document.getElementById('s').textContent='🎤 收音中...'
+  document.getElementById('s').textContent='🎤 听...'
 }
-function stop(){g=false;if(r){try{r.stop()}catch(_){}r=null}
-  document.getElementById('b').textContent='🎤 开始监听';document.getElementById('b').className='';
-  document.getElementById('s').textContent='已停止'
-}
-function send(txt){if(!txt||txt===last)return;
+function stop(){g=false;if(r){try{r.stop()}catch(_){}r=null}document.getElementById('b').textContent='🎤 开始监听';document.getElementById('b').className=''}
+function send(txt){
   document.getElementById('s').textContent='📤 '+txt.slice(0,25);
-  fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
-  .then(r=>r.json()).then(j=>{document.getElementById('info').textContent='✅ → '+ (j.target||'?');document.getElementById('s').textContent='✓ 已发送'})
-  .catch(()=>{document.getElementById('s').textContent='❌ 失败'})
+  fetch('http://127.0.0.1:9877/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
+  .then(r=>r.json()).then(j=>{document.getElementById('info').textContent='✅ → '+(j.target||'?');document.getElementById('s').textContent='✓ 已发送'})
+  .catch(e=>{document.getElementById('s').textContent='❌ '+e.message})
 }
 </script></body></html>
