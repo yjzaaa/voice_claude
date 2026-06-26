@@ -24,18 +24,27 @@ function toggle(){g?stop():start()}
 async function start(){
   if(!SR)return;
   try{await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){document.getElementById('s').textContent='❌ 麦克风';return}
-  r=new SR();r.lang='zh-CN';r.continuous=false;r.interimResults=true;
-  r.onresult=e=>{
-    let t='';for(let j=0;j<e.results.length;j++)t+=e.results[j][0].transcript;
-    document.getElementById('t').textContent=t;
-    if(t){send(t);stop()}
-  };
-  r.onerror=e=>{document.getElementById('s').textContent='⚠ '+e.error;stop()}
-  r.onend=()=>{stop()}
-  r.start();g=true;
+  g=true;
   document.getElementById('b').textContent='⏹ 停止';document.getElementById('b').className='on';
-  document.getElementById('s').textContent='🎤 听...'
+  startRec();
 }
+
+let finAcc='',tmr=0;
+function startRec(){
+  if(!g)return;
+  r=new SR();r.lang='zh-CN';r.continuous=true;r.interimResults=true;
+  r.onresult=e=>{
+    let interim='',final='';
+    for(let j=e.resultIndex;j<e.results.length;j++){let x=e.results[j][0].transcript;e.results[j].isFinal?final+=x:interim+=x}
+    document.getElementById('t').textContent=interim||finAcc;
+    if(final){finAcc+=final;clearTimeout(tmr);tmr=setTimeout(()=>{let txt=finAcc.trim();if(txt&&txt!==lastSent){lastSent=txt;send(txt)}finAcc=''},1500)}
+  };
+  r.onerror=e=>{document.getElementById('s').textContent='⚠ '+e.error;if(e.error==='no-speech')setTimeout(startRec,500)}
+  r.onend=()=>{if(g)setTimeout(startRec,300)}
+  r.start();
+  document.getElementById('s').textContent='🎤 连续听...'
+}
+let lastSent='';
 function stop(){g=false;if(r){try{r.stop()}catch(_){}r=null}document.getElementById('b').textContent='🎤 开始监听';document.getElementById('b').className=''}
 function send(txt){
   document.getElementById('s').textContent='📤 '+txt.slice(0,25);
