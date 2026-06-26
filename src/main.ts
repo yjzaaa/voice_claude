@@ -6,6 +6,10 @@ import * as path from 'path';
 import { Pipeline } from './pipeline/pipeline';
 import { loadConfig } from './config';
 
+// 代理 — Chromium Web Speech 需要翻墙
+app.commandLine.appendSwitch('proxy-server', 'http://127.0.0.1:7890');
+app.commandLine.appendSwitch('ignore-certificate-errors');
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
