@@ -1,7 +1,7 @@
 {
   "name": "voice-claude",
   "version": "1.0.0",
-  "description": "语音 → Claude Code · Electron 桌面版",
+  "description": "语音 → Claude Code · Electron + TypeScript",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",

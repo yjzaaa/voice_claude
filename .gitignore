@@ -1,8 +1,8 @@
-electron/node_modules/
-electron/dist/
-electron/out/
+node_modules/
+dist/
 *.py
 *.pyc
 __pycache__/
 .claude/
 .autoclaw/
+electron/
