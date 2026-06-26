@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>ASR</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh}
+.c{text-align:center;padding:20px}
+#t{font-size:1.2em;color:#00e676;min-height:2em;margin:10px 0;max-width:380px;word-break:break-all}
+#s{font-size:.65em;color:#888}
+button{background:#e94560;color:#fff;border:none;padding:10px 20px;font-size:.9em;border-radius:8px;cursor:pointer}
+button.on{background:#0f3460}
+</style></head><body>
+<div class="c"><h2>🎤 语音 → Claude</h2><div id="t"></div><button id="b" onclick="toggle()">🎤 开始监听</button><div id="s">就绪</div></div>
+<script>
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let r=null,g=false,sent=new Set();
+function send(txt){
+  if(!txt||sent.has(txt))return;for(let s of sent){if(s.includes(txt)||txt.includes(s))return}
+  sent.add(txt);
+  document.getElementById('s').textContent='发送中...';
+  if(window.voiceAPI?.send){window.voiceAPI.send(txt);document.getElementById('s').textContent='✓ '+txt.slice(0,30)}
+  else{fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})}).then(()=>{document.getElementById('s').textContent='✓ '+txt.slice(0,30)}).catch(e=>{document.getElementById('s').textContent='❌ '+e.message})}
+}
+document.getElementById('s').textContent = '就绪';
+function toggle(){g?stop():start()}
+function start(){
+  if(!SR)return;
+  console.log('START sr');
+  r=new SR();r.lang='zh-CN';r.continuous=true;r.interimResults=true;
+  console.log('SR configured');
+  let finA='',tmr=0;
+  r.onresult=e=>{let i='',f='';for(let j=e.resultIndex;j<e.results.length;j++){let x=e.results[j][0].transcript;e.results[j].isFinal?f+=x:i+=x}document.getElementById('t').textContent=i||f;if(f){finA+=f;clearTimeout(tmr);tmr=setTimeout(()=>{send(finA.trim());finA=''},1500)}};
+  r.onerror=e=>{document.getElementById('s').textContent='⚠ '+e.error;if(e.error==='no-speech')try{r.start()}catch(_){}}
+  r.onend=()=>{document.getElementById('s').textContent='SR结束';if(g)try{r.start()}catch(_){stop()}}
+  r.start();g=true;document.getElementById('b').textContent='⏹ 停止';document.getElementById('b').className='on';document.getElementById('s').textContent='🎤 收音中...'
+}
+function stop(){g=false;if(r){try{r.stop()}catch(_){}r=null}document.getElementById('b').textContent='🎤 开始监听';document.getElementById('b').className='';document.getElementById('s').textContent='已停止'}
+</script></body></html>
