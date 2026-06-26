@@ -1,57 +1,41 @@
 <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>voice_claude</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,"Microsoft YaHei",sans-serif;background:rgba(18,18,36,.96);color:#e0e0e0;border-radius:16px;-webkit-app-region:drag;user-select:none;height:100vh;overflow:hidden}
-.c{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px}
-#icon{font-size:3.5em;margin-bottom:8px;-webkit-app-region:no-drag}
-#t{font-size:1.1em;color:#00e676;min-height:2em;text-align:center;word-break:break-all;margin:8px 0;padding:0 16px;-webkit-app-region:no-drag}
-#s{font-size:.7em;color:#888}
-button{background:#e94560;color:#fff;border:none;padding:10px 20px;font-size:.95em;border-radius:8px;cursor:pointer;-webkit-app-region:no-drag}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh}
+.c{text-align:center;padding:20px}
+h1{font-size:1.5em;margin-bottom:20px}
+#t{font-size:1.2em;color:#00e676;min-height:2em;margin:10px 0;max-width:400px;word-break:break-all}
+#s{font-size:.65em;color:#888;margin-top:10px}
+button{background:#e94560;color:#fff;border:none;padding:12px 24px;font-size:1em;border-radius:8px;cursor:pointer}
 button.on{background:#0f3460}
 </style></head><body>
-<div class="c">
-<div id="icon">🎙️</div><div id="s">点击开始，说话即发送</div><div id="t"></div>
-<button id="b" onclick="toggle()">🎤 开始监听</button>
-</div>
+<div class="c"><h1>🎤 语音 → Claude</h1><div id="t"></div><button id="b" onclick="toggle()">🎤 开始监听</button><div id="s">就绪</div></div>
 <script>
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let r=null,g=false,lastSent='',debounceTimer=0;
-
+let r=null,g=false,sent=new Set();
+function send(txt){
+  if(!txt||sent.has(txt))return;
+  for(let s of sent){if(s.includes(txt)||txt.includes(s))return}
+  sent.add(txt);
+  document.getElementById('s').textContent='发送中...';
+  fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
+  .then(()=>{document.getElementById('s').textContent='✓ '+txt.slice(0,30)})
+  .catch(e=>{document.getElementById('s').textContent='❌ '+e.message})
+}
 function toggle(){g?stop():start()}
-
 function start(){
-  if(!SR)return;r=new SR();r.lang='zh-CN';r.continuous=true;r.interimResults=true;
-  let finalAcc='';
-
+  if(!SR){document.getElementById('s').textContent='❌ 不支持';return}
+  r=new SR();r.lang='zh-CN';r.continuous=true;r.interimResults=true;
+  let finA='',tmr=0;
   r.onresult=e=>{
-    let interim='',final='';
-    for(let j=e.resultIndex;j<e.results.length;j++){
-      let x=e.results[j][0].transcript;
-      if(e.results[j].isFinal){final+=x;finalAcc+=x}
-      else interim+=x
-    }
-    document.getElementById('t').textContent=interim||finalAcc;
-    // 只在连续 3 秒无新 final 时才发送
-    if(final){clearTimeout(debounceTimer);debounceTimer=setTimeout(()=>{
-      let txt=finalAcc.trim();
-      if(txt&&txt!==lastSent){
-        lastSent=txt;finalAcc='';window.voiceAPI?.send(txt)
-      }
-    },2500)}
+    let inter='',fin='';
+    for(let j=e.resultIndex;j<e.results.length;j++){let x=e.results[j][0].transcript;e.results[j].isFinal?fin+=x:inter+=x}
+    document.getElementById('t').textContent=inter||fin;
+    if(fin){finA+=fin;clearTimeout(tmr);tmr=setTimeout(()=>{send(finA.trim());finA=''},1500)}
   };
-
-  r.onerror=e=>{if(e.error==='no-speech')try{r.start()}catch(_){}};
-  r.onend=()=>{if(g)try{r.start()}catch(_){stop()}};
-  r.start();g=true;
-  document.getElementById('b').textContent='⏹ 停止';
-  document.getElementById('b').className='on';
-  document.getElementById('s').textContent='🎤 收音中...'
+  r.onerror=e=>{document.getElementById('s').textContent='⚠ '+e.error;if(e.error==='no-speech')try{r.start()}catch(_){}}
+  r.onend=()=>{if(g)try{r.start()}catch(_){stop()}}
+  r.start();g=true;document.getElementById('b').textContent='⏹ 停止';document.getElementById('b').className='on';document.getElementById('s').textContent='🎤 收音中...'
 }
-
-function stop(){
-  clearTimeout(debounceTimer);g=false;
-  if(r){try{r.stop()}catch(_){}r=null}
-  document.getElementById('b').textContent='🎤 开始监听';
-  document.getElementById('b').className='';document.getElementById('s').textContent='已停止'
-}
+function stop(){g=false;if(r){try{r.stop()}catch(_){}r=null}document.getElementById('b').textContent='🎤 开始监听';document.getElementById('b').className='';document.getElementById('s').textContent='已停止'}
 </script></body></html>

@@ -1,80 +1,67 @@
-/**
- * voice_claude — Electron + TypeScript
- */
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, Tray, clipboard, shell, nativeImage } from 'electron';
 import * as path from 'path';
-import { Pipeline } from './pipeline/pipeline';
-import { loadConfig } from './config';
+import * as fs from 'fs';
+import * as http from 'http';
 
-// 单实例锁
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) { app.quit(); process.exit(0); }
+const LOG = path.join(__dirname, '..', 'voice.log');
+function log(...args: any[]) { const m=args.join(' '); console.log(m); fs.appendFileSync(LOG, m+'\n'); }
 
-app.on('second-instance', () => {
-  if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+if (!app.requestSingleInstanceLock()) { process.exit(0); }
+
+const koffi = require('koffi');
+const kb = koffi.load('user32.dll').func('void keybd_event(uchar vk, uchar scan, int flags, size_t extra)');
+const V = { CTRL: 0x11, V: 0x56, ENTER: 0x0D, UP: 2 };
+const slp = (ms: number) => new Promise(r => setTimeout(r, ms));
+async function paste() {
+  kb(V.CTRL, 0, 0, 0); await slp(50); kb(V.V, 0, 0, 0); await slp(50);
+  kb(V.V, 0, V.UP, 0); await slp(50); kb(V.CTRL, 0, V.UP, 0); await slp(100);
+  kb(V.ENTER, 0, 0, 0); await slp(50); kb(V.ENTER, 0, V.UP, 0);
+}
+
+const HTML = fs.readFileSync(path.join(__dirname, '..', 'renderer.html'), 'utf-8');
+const sent = new Set<string>();
+
+http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+  if (req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(HTML); return; }
+  if (req.method === 'POST' && req.url === '/send') {
+    let body = ''; req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { text } = JSON.parse(body);
+        if (text && !sent.has(text)) {
+          let dup = false; for (const s of sent) { if (s.includes(text) || text.includes(s)) { dup = true; break; } }
+          if (!dup) { sent.add(text); log('[voice]', text); clipboard.writeText(text); paste(); }
+        }
+      } catch (e: any) { log('ERR', e.message); }
+      res.writeHead(200); res.end('ok');
+    }); return;
+  }
+  res.writeHead(404); res.end();
+}).listen(9877, '0.0.0.0', () => {
+  log('HTTP :9877 — 右键托盘打开 Chrome');
+  shell.openExternal('http://localhost:9877');
 });
 
-// 代理 — Chromium Web Speech 需要翻墙
-app.commandLine.appendSwitch('proxy-server', 'http://127.0.0.1:7890');
-app.commandLine.appendSwitch('ignore-certificate-errors');
+function icon(c: string) { return nativeImage.createFromDataURL(`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="${c}"/></svg>`)}`); }
 
-let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
-let isQuitting = false;
-let pipeline: Pipeline | null = null;
-
-function icon(color: string) {
-  return nativeImage.createFromDataURL(
-    `data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`
-    )}`
-  );
-}
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 400, height: 340, frame: false, transparent: true,
-    resizable: false, skipTaskbar: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false, contextIsolation: true,
-    },
-  });
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer.html'));
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) { e.preventDefault(); mainWindow?.hide(); }
-  });
-}
-
-function createTray() {
-  tray = new Tray(icon('#00e676'));
-  tray.setToolTip('voice_claude');
-  const update = () => {
-    const s = pipeline?.stats();
-    tray?.setContextMenu(Menu.buildFromTemplate([
-      { label: `📋 收${s?.collected||0} 增${s?.enhanced||0} 发${s?.delivered||0}`, enabled: false },
-      { type: 'separator' },
-      { label: '🖥 显示面板', click: () => mainWindow?.show() },
-      { label: '❌ 退出', click: () => { isQuitting = true; pipeline?.stop(); app.quit(); } },
-    ]));
-  };
-  setInterval(update, 3000);
-  tray.on('click', () => mainWindow?.isVisible() ? mainWindow?.hide() : mainWindow?.show());
-}
-
-// IPC: 渲染进程 → 主进程 文字投喂
-ipcMain.handle('voice:text', async (_e, text: string) => {
-  pipeline?.feed(text);
-});
+let win: BrowserWindow | null = null, isQuitting = false;
 
 app.whenReady().then(() => {
-  const config = loadConfig();
-  pipeline = new Pipeline(config);
-  pipeline.start();
-  createWindow();
-  createTray();
-  mainWindow?.show();
+  log('Ready');
+  win = new BrowserWindow({ width: 400, height: 200, frame: false, transparent: true, resizable: false });
+  win.loadFile(path.join(__dirname, '..', 'status.html'));
+  win.on('close', e => { if (!isQuitting) { e.preventDefault(); win?.hide(); } });
+  const tray = new Tray(icon('#00e676'));
+  tray.setToolTip('voice_claude');
+  tray.setContextMenu(require('electron').Menu.buildFromTemplate([
+    { label: '🌐 打开语音页面', click: () => shell.openExternal('http://localhost:9877') },
+    { label: '❌ 退出', click: () => { isQuitting = true; app.quit(); } },
+  ]));
+  tray.on('click', () => win?.isVisible() ? win?.hide() : win?.show());
+  win.show();
 });
 
 app.on('window-all-closed', () => {});
-app.on('before-quit', () => { isQuitting = true; pipeline?.stop(); });
+app.on('before-quit', () => { isQuitting = true; log('Quit'); });

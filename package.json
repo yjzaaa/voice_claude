@@ -7,6 +7,11 @@
     "build": "tsc",
     "start": "tsc && electron ."
   },
-  "dependencies": { "electron": "^34.5.8" },
-  "devDependencies": { "typescript": "^5.5.0" }
+  "dependencies": {
+    "electron": "^34.5.8",
+    "koffi": "^3.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
 }
