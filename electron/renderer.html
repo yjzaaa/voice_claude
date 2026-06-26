@@ -1,0 +1,24 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>voice_claude</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,"Microsoft YaHei",sans-serif;background:rgba(18,18,36,.96);color:#e0e0e0;border-radius:16px;-webkit-app-region:drag;user-select:none;height:100vh;overflow:hidden}
+.c{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px}
+#icon{font-size:3.5em;margin-bottom:8px;-webkit-app-region:no-drag;transition:transform .2s}
+#icon.on{transform:scale(1.1)}
+#t{font-size:1.2em;color:#00e676;min-height:2.2em;text-align:center;word-break:break-all;margin:8px 0;padding:0 16px;-webkit-app-region:no-drag}
+#s{font-size:.7em;color:#888;margin:4px 0;min-height:1.2em}
+button{background:#e94560;color:#fff;border:none;padding:10px 20px;font-size:.95em;border-radius:8px;cursor:pointer;-webkit-app-region:no-drag}
+button.on{background:#0f3460}
+</style></head><body>
+<div class="c">
+<div id="icon">🎙️</div><div id="s">点击开始，说话即发送</div><div id="t"></div>
+<button id="b" onclick="toggle()">🎤 开始监听</button>
+</div>
+<script>
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let r=null,g=false,last='';
+function toggle(){g?stop():start()}
+function start(){if(!SR)return;r=new SR();r.lang='zh-CN';r.continuous=true;r.interimResults=true;r.onresult=e=>{let i='',f='';for(let j=e.resultIndex;j<e.results.length;j++){let x=e.results[j][0].transcript;e.results[j].isFinal?f+=x:i+=x}document.getElementById('t').textContent=i||f;if(f&&f.trim()!==last){last=f.trim();window.voiceAPI?.send(last)}};r.onerror=e=>{if(e.error==='no-speech'){try{r.start()}catch(_){}}};r.onend=()=>{if(g)try{r.start()}catch(_){stop()}};r.start();g=true;document.getElementById('b').textContent='⏹ 停止';document.getElementById('b').className='on';document.getElementById('s').textContent='🎤 收音中...'}
+function stop(){g=false;if(r){try{r.stop()}catch(_){}r=null}document.getElementById('b').textContent='🎤 开始监听';document.getElementById('b').className='';document.getElementById('s').textContent='已停止'}
+window.voiceAPI?.onToggle(()=>toggle());
+</script></body></html>

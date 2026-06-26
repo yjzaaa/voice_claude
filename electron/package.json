@@ -1,0 +1,12 @@
+{
+  "name": "voice-claude",
+  "version": "1.0.0",
+  "description": "语音 → Claude Code · Electron 桌面版",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && electron ."
+  },
+  "dependencies": { "electron": "^34.5.8" },
+  "devDependencies": { "typescript": "^5.5.0" }
+}
