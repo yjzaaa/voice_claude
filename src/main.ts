@@ -6,44 +6,38 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
 import { exec } from 'child_process';
+import { createPlatform } from './platform';
 import { InstanceRegistry } from './instance/registry';
 import { Router } from './instance/router';
+import { transcribe } from './asr';
 
 const LOG = path.join(__dirname, '..', 'voice.log');
 function log(...args: any[]) { const m=args.join(' '); console.log(m); fs.appendFileSync(LOG, m+'\n'); }
 
 if (!app.requestSingleInstanceLock()) { process.exit(0); }
 
-const koffi = require('koffi');
-const kb = koffi.load('user32.dll').func('void keybd_event(uchar vk, uchar scan, int flags, size_t extra)');
-const { execSync } = require('child_process');
-const PY = 'D:/autoclaw/resources/python/python.exe';
-const FOCUS_WIN = path.join(__dirname, '..', 'focus_win.py');
-
-function focusWindow(hwnd: number) {
-  try { execSync(`"${PY}" "${FOCUS_WIN}" ${hwnd}`, { timeout: 2000 }); }
-  catch {}
-}
+const platform = createPlatform();
 const slp = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-async function paste() { kb(0x11,0,0,0);await slp(50);kb(0x56,0,0,0);await slp(50);kb(0x56,0,2,0);await slp(50);kb(0x11,0,2,0);await slp(100);kb(0x0D,0,0,0);await slp(50);kb(0x0D,0,2,0); }
-
 // 实例 + 路由
-const reg = new InstanceRegistry();
+const reg = new InstanceRegistry(platform);
 const router = new Router(reg);
 
 async function deliver(text: string): Promise<string> {
   if (!text) return 'empty';
   const { inst, reason } = await router.resolve(text);
   if (router.isCmd) {
-    if (inst) { focusWindow(inst.hwnd); }
+    if (inst) { platform.focusWindow(inst.hwnd); }
     return reason;
   }
 
   log('[voice]→', inst?.name || 'foreground', text.slice(0, 30));
   clipboard.writeText(text);
-  if (inst) { await focusWindow(inst.hwnd); }
-  await paste();
+  if (inst) { platform.focusWindow(inst.hwnd); }
+  await slp(150);
+  platform.sendKeys('ctrl', 'v');
+  await slp(200);
+  platform.sendKeys('enter');
   return inst?.name || '前台';
 }
 
@@ -74,13 +68,39 @@ http.createServer((req, res) => {
     });
     return;
   }
+  // ASR fallback endpoint — 接收 PCM 音频，返回识别文本
+  if (req.method === 'POST' && req.url === '/asr') {
+    const chunks: Buffer[] = [];
+    req.on('data', (d: Buffer) => chunks.push(d));
+    req.on('end', async () => {
+      try {
+        log(`[asr] PCM ${(chunks.reduce((s, c) => s + c.length, 0) / 32000).toFixed(1)}s`);
+        const audio = Buffer.concat(chunks);
+        const text = await transcribe(audio, { sampleRate: 16000 });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: text || '', ok: !!text }));
+      } catch (e: any) {
+        log(`[asr] error: ${e.message}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: '', ok: false }));
+      }
+    });
+    return;
+  }
   res.writeHead(404); res.end();
 }).listen(9877, '127.0.0.1', () => {
   log('HTTP :9877');
-  const chrome = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-  const chrome2 = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe';
+  const CHROME_PATHS = [
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  ];
+  const chromePath = CHROME_PATHS.find(p => fs.existsSync(p));
   const url = 'http://127.0.0.1:9877';
-  exec(`"${chrome}" --proxy-server=http://127.0.0.1:7890 --proxy-bypass-list="127.0.0.1;localhost" --app=${url}`);
+  if (chromePath) {
+    exec(`"${chromePath}" --proxy-server=http://127.0.0.1:7890 --proxy-bypass-list="127.0.0.1;localhost" --app=${url}`);
+  } else {
+    log('[asr] Chrome not found, starting Doubao ASR fallback');
+  }
 });
 
 // 窗口发现 + 实时监听
@@ -98,7 +118,19 @@ app.whenReady().then(() => {
   win.on('close', e => { if (!isQuitting) { e.preventDefault(); win?.hide(); } });
   new Tray(icon('#00e676')).on('click', () => win?.isVisible() ? win?.hide() : win?.show());
   win.show();
+
+  // 如果 Chrome 不可用，启动 Doubao ASR 回退页面
+  const hasChrome = ['C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  ].some(p => fs.existsSync(p));
+  if (!hasChrome) {
+    log('[asr] starting Doubao fallback capture page');
+    setTimeout(() => {
+      const capWin = new BrowserWindow({ width: 1, height: 1, show: false });
+      capWin.loadFile(path.join(__dirname, '..', 'capture.html'));
+    }, 500);
+  }
 });
 
 app.on('window-all-closed', () => {});
-app.on('before-quit', () => { isQuitting = true; watcher.kill(); });
+app.on('before-quit', () => { isQuitting = true; watcher.stop(); });

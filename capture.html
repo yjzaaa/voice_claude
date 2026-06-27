@@ -1,0 +1,166 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>ASR Fallback</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh}
+.c{text-align:center;padding:20px;max-width:400px}
+#s{font-size:.8em;color:#888;margin-top:8px}
+#t{font-size:1em;color:#00e676;margin-top:4px;word-break:break-all;min-height:1.2em}
+</style></head><body>
+<div class="c">
+<h2>Doubao ASR Fallback</h2>
+<div id="s">初始化...</div>
+<div id="t"></div>
+</div>
+<script>
+const STATUS = document.getElementById('s');
+const OUTPUT = document.getElementById('t');
+
+function log(msg) { STATUS.textContent = msg; console.log('[ASR]', msg); }
+
+// 音频参数
+const SAMPLE_RATE = 16000;
+const SILENCE_THRESHOLD = 300;    // RMS 能量阈值
+const SILENCE_DURATION = 1500;    // 静音多长时间后发送（ms）
+const MAX_CHUNK_MS = 10000;       // 最长单段录音（10秒）
+
+let audioCtx = null;
+let source = null;
+let processor = null;
+let stream = null;
+let pcmChunks = [];
+let lastSpeechTime = 0;
+let startTime = 0;
+let isSpeaking = false;
+let sendTimer = null;
+let lastSentText = '';
+let isProcessing = false;
+
+async function startCapture() {
+  try {
+    log('请求麦克风...');
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+    source = audioCtx.createMediaStreamSource(stream);
+
+    // ScriptProcessorNode（已被标弃但Electron可用）
+    processor = audioCtx.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = onAudioProcess;
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+
+    startTime = Date.now();
+    lastSpeechTime = startTime;
+    pcmChunks = [];
+    log('已就绪，等待语音...');
+  } catch (e) {
+    log('麦克风错误: ' + e.message);
+    setTimeout(startCapture, 2000);
+  }
+}
+
+function onAudioProcess(e) {
+  if (isProcessing) return;
+  const input = e.inputBuffer.getChannelData(0);
+
+  // 计算 RMS 能量
+  let sum = 0;
+  for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+  const rms = Math.sqrt(sum / input.length);
+
+  // 转换为 PCM 16-bit
+  const pcm = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
+  }
+  pcmChunks.push(Buffer.from(pcm.buffer));
+
+  const now = Date.now();
+  if (rms > SILENCE_THRESHOLD / 32768) {
+    // 有语音
+    if (!isSpeaking) {
+      isSpeaking = true;
+      log('检测到语音...');
+    }
+    lastSpeechTime = now;
+  }
+
+  // 判断是否应该发送
+  const duration = now - startTime;
+  const silenceSince = now - lastSpeechTime;
+
+  if (isSpeaking && (silenceSince > SILENCE_DURATION || duration > MAX_CHUNK_MS)) {
+    if (sendTimer) return; // 已有发送在进行中
+    sendTimer = setTimeout(sendAudio, 100);
+  }
+}
+
+async function sendAudio() {
+  sendTimer = null;
+  if (pcmChunks.length === 0) return;
+
+  isProcessing = true;
+  const chunks = pcmChunks;
+  pcmChunks = [];
+  isSpeaking = false;
+  lastSpeechTime = Date.now();
+
+  // 合并 PCM 数据
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const merged = Buffer.concat(chunks, totalLen);
+
+  log('发送音频 ' + (merged.length / 32000).toFixed(1) + 's...');
+
+  try {
+    // 调用 /asr 端点
+    const resp = await fetch('/asr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: merged.buffer,
+    });
+    const result = await resp.json();
+    const text = result.text || '';
+    if (text && text !== lastSentText) {
+      lastSentText = text;
+      OUTPUT.textContent = text;
+      log('识别: ' + text.slice(0, 30));
+
+      // 发送到 /send
+      const sendResp = await fetch('/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const sendResult = await sendResp.json();
+      log('已发送 → ' + (sendResult.target || '?'));
+    } else if (!text) {
+      log('无识别结果');
+    }
+  } catch (e) {
+    log('ASR 错误: ' + e.message);
+  }
+
+  isProcessing = false;
+}
+
+// Buffer polyfill 用于 Electron
+if (typeof Buffer === 'undefined') {
+  window.Buffer = class Buffer {
+    static concat(list, totalLen) {
+      if (list.length === 0) return new Uint8Array(0);
+      if (!totalLen) totalLen = list.reduce((s, b) => s + b.byteLength, 0);
+      const result = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const b of list) {
+        result.set(new Uint8Array(b), offset);
+        offset += b.byteLength;
+      }
+      return result;
+    }
+    static from(data) { return data; }
+  };
+  window.Int16Array = Int16Array;
+}
+
+// 自动启动
+startCapture();
+</script></body></html>
