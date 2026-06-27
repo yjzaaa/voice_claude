@@ -31,6 +31,7 @@ export class Router {
   target = 'terminal';
   isCmd = false;
   lastTarget = '';
+  private lastUsed = '';  // 最近成功投递的目标
 
   constructor(reg: InstanceRegistry) {
     this.reg = reg;
@@ -58,17 +59,24 @@ export class Router {
 
     // 前台优先
     const active = this.reg.getActive();
-    if (active) { this.target = active.name; return { inst: active, reason: '前台' }; }
-
-    // Schema 导航
-    const best = await llmNavigate(text, this.reg.list());
-    if (best) {
-      const inst = this.reg.get(best);
-      if (inst) { this.target = best; this.lastTarget = best; return { inst, reason: `schema→${best}` }; }
+    if (active) {
+      this.target = active.name;
+      this.lastUsed = active.name;
+      return { inst: active, reason: '前台' };
     }
 
-    // 绝不空：LLM 失败→当前目标→第一个窗口→null(贴前台)
-    const def = this.reg.get(this.target) || this.reg.list()[0] || null;
+    // 双速：非 Claude 窗口时，先发到上次用的目标，后台 LLM
+    const fast = this.reg.get(this.lastUsed) || this.reg.list()[0];
+    if (fast) {
+      // 后台异步跑 LLM，更新 lastUsed（不阻塞）
+      llmNavigate(text, this.reg.list()).then(best => {
+        if (best) { this.lastUsed = best; this.target = best; }
+      });
+      return { inst: fast, reason: `快速→${fast.name}` };
+    }
+
+    // 绝不为空
+    const def = this.reg.list()[0] || null;
     return { inst: def, reason: def ? '默认' : '前台' };
   }
 
