@@ -1,5 +1,6 @@
 /**
- * voice_claude — Electron + Chrome App + 路由
+ * voice_claude -- Electron + Chrome App + 路由
+ * Uses the cross-platform Platform abstraction for window ops.
  */
 import { app, BrowserWindow, Tray, clipboard, nativeImage } from 'electron';
 import * as path from 'path';
@@ -12,7 +13,7 @@ import { Router } from './instance/router';
 import { transcribe } from './asr';
 
 const LOG = path.join(__dirname, '..', 'voice.log');
-function log(...args: any[]) { const m=args.join(' '); console.log(m); fs.appendFileSync(LOG, m+'\n'); }
+function log(...args: any[]) { const m = args.join(' '); console.log(m); fs.appendFileSync(LOG, m + '\n'); }
 
 if (!app.requestSingleInstanceLock()) { process.exit(0); }
 
@@ -31,7 +32,7 @@ async function deliver(text: string): Promise<string> {
     return reason;
   }
 
-  log('[voice]→', inst?.name || 'foreground', text.slice(0, 30));
+  log('[voice]->', inst?.name || 'foreground', text.slice(0, 30));
   clipboard.writeText(text);
   if (inst) { platform.focusWindow(inst.hwnd); }
   await slp(150);
@@ -45,10 +46,10 @@ async function deliver(text: string): Promise<string> {
 const PAGE = fs.readFileSync(path.join(__dirname, '..', 'speech.html'), 'utf-8');
 http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const ts = new Date().toISOString().slice(11,23);
-  log(ts, req.method, req.url, req.headers['content-type']||'');
+  const ts = new Date().toISOString().slice(11, 23);
+  log(ts, req.method, req.url, req.headers['content-type'] || '');
   if (req.method === 'GET' && req.url === '/status') {
-    const ws = reg.list().map(i => `${i.name}: ${i.title.slice(0,30)}`).join(', ');
+    const ws = reg.list().map(i => `${i.name}: ${i.title.slice(0, 30)}`).join(', ');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ target: router.target || 'terminal', count: reg.list().length, windows: ws }));
     return;
@@ -68,7 +69,7 @@ http.createServer((req, res) => {
     });
     return;
   }
-  // ASR fallback endpoint — 接收 PCM 音频，返回识别文本
+  // ASR fallback endpoint -- receive PCM audio, return recognized text
   if (req.method === 'POST' && req.url === '/asr') {
     const chunks: Buffer[] = [];
     req.on('data', (d: Buffer) => chunks.push(d));
@@ -103,9 +104,9 @@ http.createServer((req, res) => {
   }
 });
 
-// 窗口发现 + 实时监听
+// Window discovery + live monitoring
 reg.scan();
-const watcher = reg.watch(e => { log(`🪟 ${e.event}: ${e.title.slice(0, 30)}`); reg.scan(); });
+const watcher = reg.watch(e => { log(`window: ${e.event}: ${e.title.slice(0, 30)}`); reg.scan(); });
 
 function icon(c: string) { return nativeImage.createFromDataURL(`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="${c}"/></svg>`)}`); }
 
@@ -119,8 +120,9 @@ app.whenReady().then(() => {
   new Tray(icon('#00e676')).on('click', () => win?.isVisible() ? win?.hide() : win?.show());
   win.show();
 
-  // 如果 Chrome 不可用，启动 Doubao ASR 回退页面
-  const hasChrome = ['C:/Program Files/Google/Chrome/Application/chrome.exe',
+  // If Chrome is unavailable, start Doubao ASR fallback page
+  const hasChrome = [
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   ].some(p => fs.existsSync(p));
   if (!hasChrome) {
