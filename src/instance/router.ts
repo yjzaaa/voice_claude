@@ -4,7 +4,7 @@
 import { Instance, InstanceRegistry, WindowSchema } from './registry';
 import * as https from 'https';
 
-const KEY = 'sk-938dfb4cb1e741ed960e2882da9d2eea';
+const KEY = process.env.VOICE_CLAUDE_LLM_KEY || process.env.DEEPSEEK_API_KEY || '';
 
 function llmNavigate(text: string, wins: Instance[]): Promise<string|null> {
   if (!wins.length) return Promise.resolve(null);
@@ -94,7 +94,7 @@ export class Router {
       { role: 'system', content: '分析消息，更新窗口Schema。返回JSON: {"labels":["新增标签"],"task":"更新后的任务(可选)"}。基于现有信息增量更新，不要覆盖已有标签。只返回JSON。' },
       { role: 'user', content: `当前: labels=[${s.labels.join(',')}] task="${s.task}"\n消息: "${text}"\n更新: 提取新标签，如消息体现任务变化则更新task。` }
     ], temperature: 0, max_tokens: 80 });
-    const req = (require('https') as typeof import('https')).request('https://api.deepseek.com/v1/chat/completions', { method: 'POST', timeout: 4000, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-938dfb4cb1e741ed960e2882da9d2eea' } }, res => {
+    const req = (require('https') as typeof import('https')).request('https://api.deepseek.com/v1/chat/completions', { method: 'POST', timeout: 4000, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (process.env.VOICE_CLAUDE_LLM_KEY || process.env.DEEPSEEK_API_KEY || '') } }, res => {
       let d = ''; res.on('data', c => d += c); res.on('end', () => {
         try { const j = JSON.parse(JSON.parse(d).choices[0].message.content); if (j.labels) this.reg.setSchema(winName, { labels: [...new Set([...s.labels, ...j.labels])], task: j.task || s.task }); } catch {}
       });

@@ -27,7 +27,7 @@ function defaultSchema(title: string): WindowSchema {
       { role: 'system', content: '从任务名提取标签。返回JSON: {"labels":["标签1","标签2"],"project":"项目名"}。只返回JSON。' },
       { role: 'user', content: `任务: "${task}"` }
     ], temperature: 0, max_tokens: 80 });
-    const req = https.request('https://api.deepseek.com/v1/chat/completions', { method: 'POST', timeout: 4000, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-938dfb4cb1e741ed960e2882da9d2eea' } }, res => {
+    const req = https.request('https://api.deepseek.com/v1/chat/completions', { method: 'POST', timeout: 4000, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (process.env.VOICE_CLAUDE_LLM_KEY || process.env.DEEPSEEK_API_KEY || '') } }, res => {
       let d = ''; res.on('data', c => d += c); res.on('end', () => {
         try { const j = JSON.parse(JSON.parse(d).choices[0].message.content); if (j.labels) s.labels = j.labels; if (j.project) s.project = j.project; } catch {}
       });

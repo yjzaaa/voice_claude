@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "electron": "^34.5.8",
-    "koffi": "^3.0.2"
+    "koffi": "^3.0.2",
+    "vosk-browser": "^0.0.8"
   },
   "devDependencies": {
+    "electron-reload": "^2.0.0-alpha.1",
     "typescript": "^5.5.0"
   }
 }

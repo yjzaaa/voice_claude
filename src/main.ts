@@ -49,7 +49,7 @@ http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const t0 = Date.now();
   if (req.method === 'GET' && req.url === '/status') {
-    const ws = reg.list().map(i => `${i.name}: ${i.title.slice(0,30)}`).join(', ');
+    const ws = reg.list().map(i => `${i.name}: ${i.title.slice(0, 30)}`).join(', ');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ target: router.target || 'terminal', count: reg.list().length, windows: ws }));
     return;
@@ -83,7 +83,7 @@ http.createServer((req, res) => {
   exec(`"${chrome}" --proxy-server=http://127.0.0.1:7890 --proxy-bypass-list="127.0.0.1;localhost" --app=${url}`);
 });
 
-// 窗口发现 + 实时监听
+// Window discovery + live monitoring
 reg.scan();
 const watcher = reg.watch(e => { log('window', `${e.event}: ${e.title.slice(0, 30)}`); reg.scan(); });
 
