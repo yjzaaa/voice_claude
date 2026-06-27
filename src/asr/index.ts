@@ -2,9 +2,13 @@
  * ASR 统一导出
  * 支持多后端：Doubao (豆包) v3 为主，预留扩展接口
  */
+<<<<<<< HEAD
 import { transcribe as doubaoTranscribe, setLogFile } from './doubao';
 
 export { setLogFile };
+=======
+import { transcribe as doubaoTranscribe } from './doubao';
+>>>>>>> cross-platform
 
 /** ASR 后端类型 */
 export type AsrBackend = 'doubao' | 'test';
@@ -36,6 +40,7 @@ export async function transcribe(audio: Buffer, options: AsrOptions = {}): Promi
 
 /**
  * testTranscribe — 测试用（返回固定值或 null）
+<<<<<<< HEAD
  * 用于验证集成是否正常工作
  */
 export async function testTranscribe(audio: Buffer): Promise<string | null> {
@@ -70,3 +75,10 @@ export function generateTone(freqHz = 440, ms = 2000, sampleRate = 16000): Buffe
   }
   return buf;
 }
+=======
+ */
+export async function testTranscribe(audio: Buffer): Promise<string | null> {
+  if (audio.every(b => b === 0)) return null;
+  return '测试语音识别';
+}
+>>>>>>> cross-platform

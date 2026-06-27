@@ -15,11 +15,19 @@ const FOCUS_WIN = path.join(ROOT, 'focus_win.py');
 const KILL_WIN = path.join(ROOT, 'kill_win.py');
 const WATCH_WIN = path.join(ROOT, 'watch_win.py');
 
+<<<<<<< HEAD
 /** Busy-wait for N ms (synchronous — matches existing patterns). */
 function sleep(ms: number) {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
     /* spin — acceptable for short polling windows */
+=======
+/** Busy-wait for N ms (synchronous -- matches existing patterns). */
+function sleep(ms: number) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    /* spin -- acceptable for short polling windows */
+>>>>>>> cross-platform
   }
 }
 
@@ -33,7 +41,11 @@ export class Win32Platform implements Platform {
     return this.kb;
   }
 
+<<<<<<< HEAD
   // ── Window discovery ───────────────────────────────────────
+=======
+  // -- Window discovery -------------------------------------------------------
+>>>>>>> cross-platform
 
   findWindows(): WindowInfo[] {
     try {
@@ -54,7 +66,11 @@ export class Win32Platform implements Platform {
     }
   }
 
+<<<<<<< HEAD
   // ── Window focusing ────────────────────────────────────────
+=======
+  // -- Window focusing --------------------------------------------------------
+>>>>>>> cross-platform
 
   focusWindow(hwnd: number): void {
     try {
@@ -64,7 +80,11 @@ export class Win32Platform implements Platform {
     }
   }
 
+<<<<<<< HEAD
   // ── Window closing ─────────────────────────────────────────
+=======
+  // -- Window closing ---------------------------------------------------------
+>>>>>>> cross-platform
 
   closeWindow(hwnd: number): void {
     try {
@@ -74,7 +94,11 @@ export class Win32Platform implements Platform {
     }
   }
 
+<<<<<<< HEAD
   // ── Window watching ────────────────────────────────────────
+=======
+  // -- Window watching --------------------------------------------------------
+>>>>>>> cross-platform
 
   watchWindows(callback: (e: WatchEvent) => void): WatchHandle {
     const p = spawn(PY, [WATCH_WIN], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -104,7 +128,11 @@ export class Win32Platform implements Platform {
     };
   }
 
+<<<<<<< HEAD
   // ── Keyboard simulation (via koffi) ────────────────────────
+=======
+  // -- Keyboard simulation (via koffi) ----------------------------------------
+>>>>>>> cross-platform
 
   sendKeys(...keys: string[]): void {
     const kb = this.ensureKb();
@@ -143,7 +171,11 @@ export class Win32Platform implements Platform {
     }
   }
 
+<<<<<<< HEAD
   // ── Terminal launcher ──────────────────────────────────────
+=======
+  // -- Terminal launcher ------------------------------------------------------
+>>>>>>> cross-platform
 
   launchTerminal(title: string): number | null {
     const before = new Set(this.findWindows().map((w) => w.hwnd));
@@ -162,7 +194,11 @@ export class Win32Platform implements Platform {
     return null;
   }
 
+<<<<<<< HEAD
   // ── Foreground window (via Python ctypes) ──────────────────
+=======
+  // -- Foreground window (via Python ctypes) ----------------------------------
+>>>>>>> cross-platform
 
   getActiveWindow(): number | null {
     try {
@@ -178,7 +214,11 @@ export class Win32Platform implements Platform {
   }
 }
 
+<<<<<<< HEAD
 // ── Module-level koffi loader (lazy singleton) ────────────────
+=======
+// -- Module-level koffi loader (lazy singleton) ------------------------------
+>>>>>>> cross-platform
 
 function loadKb() {
   const koffi = require('koffi');

@@ -5,7 +5,8 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
-    "start": "tsc && electron ."
+    "start": "tsc && electron .",
+    "dev": "tsc && node dev.js"
   },
   "dependencies": {
     "electron": "^34.5.8",

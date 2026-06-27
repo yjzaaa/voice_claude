@@ -1,5 +1,9 @@
 /**
+<<<<<<< HEAD
  * macOS Platform — Stub implementation
+=======
+ * macOS Platform -- Stub implementation
+>>>>>>> cross-platform
  *
  * Uses osascript (AppleScript) for window management and keyboard
  * simulation on macOS.  Window identifiers are UNIX PIDs.
@@ -7,7 +11,11 @@
  * NOTE: This is a best-effort stub.  It compiles and follows the
  * Platform contract but has NOT been tested on macOS.
  */
+<<<<<<< HEAD
 import { execSync, spawn, ChildProcess } from 'child_process';
+=======
+import { execSync } from 'child_process';
+>>>>>>> cross-platform
 import { Platform, WindowInfo, WatchEvent, WatchHandle } from './index';
 
 /** Run an osascript snippet and return stdout. */
@@ -24,6 +32,7 @@ function osa(script: string): string {
   }
 }
 
+<<<<<<< HEAD
 /** AppleScript – bring process with given UNIX PID to front */
 const ACTIVATE_BY_PID = (pid: number) =>
   `tell application "System Events"\n` +
@@ -40,6 +49,10 @@ const CLOSE_BY_PID = (pid: number) =>
 
 export class DarwinPlatform implements Platform {
   // ── Window discovery ───────────────────────────────────────
+=======
+export class DarwinPlatform implements Platform {
+  // -- Window discovery -------------------------------------------------------
+>>>>>>> cross-platform
 
   findWindows(): WindowInfo[] {
     const script = [
@@ -75,6 +88,7 @@ export class DarwinPlatform implements Platform {
       .filter((w): w is WindowInfo => w !== null);
   }
 
+<<<<<<< HEAD
   // ── Window focusing ────────────────────────────────────────
 
   focusWindow(hwnd: number): void {
@@ -88,6 +102,31 @@ export class DarwinPlatform implements Platform {
   }
 
   // ── Window watching (poll-based) ───────────────────────────
+=======
+  // -- Window focusing --------------------------------------------------------
+
+  focusWindow(hwnd: number): void {
+    osa(
+      'tell application "System Events"\n' +
+      `  set frontmost of (first process whose unix id is ${hwnd}) to true\n` +
+      'end tell',
+    );
+  }
+
+  // -- Window closing ---------------------------------------------------------
+
+  closeWindow(hwnd: number): void {
+    osa(
+      'tell application "System Events"\n' +
+      `  tell (first process whose unix id is ${hwnd})\n` +
+      `    if exists window 1 then click (first button of window 1 whose subrole is "AXCloseButton")\n` +
+      '  end tell\n' +
+      'end tell',
+    );
+  }
+
+  // -- Window watching (poll-based) -------------------------------------------
+>>>>>>> cross-platform
 
   watchWindows(callback: (e: WatchEvent) => void): WatchHandle {
     let stopped = false;
@@ -124,6 +163,7 @@ export class DarwinPlatform implements Platform {
     return { stop: () => { stopped = true; } };
   }
 
+<<<<<<< HEAD
   // ── Keyboard simulation (via osascript) ────────────────────
 
   sendKeys(...keys: string[]): void {
@@ -169,11 +209,53 @@ export class DarwinPlatform implements Platform {
       } else {
         textKeys.push(k);
         break; // remaining keys are sequential, not chorded
+=======
+  // -- Keyboard simulation (via osascript) ------------------------------------
+
+  sendKeys(...keys: string[]): void {
+    if (keys.length === 0) return;
+
+    // Map sequential keys to AppleScript keystroke names
+    const mapKey = (k: string): string | null => {
+      switch (k.toLowerCase()) {
+        case 'ctrl':  return null; // modifier, handled via 'using'
+        case 'v':     return 'v';
+        case 'enter': return 'return';
+        case 'escape': return 'escape';
+        case 'tab':   return 'tab';
+        case 'space': return 'space';
+        case 'backspace': return 'delete';
+        case 'up':    return 'up';
+        case 'down':  return 'down';
+        case 'left':  return 'left';
+        case 'right': return 'right';
+        default:      return k;
+      }
+    };
+
+    // Collect modifiers from leading key names
+    const modifiers: string[] = [];
+    const textKeys: string[] = [];
+    for (const k of keys) {
+      const lower = k.toLowerCase();
+      if (lower === 'ctrl') {
+        modifiers.push('command down'); // typical Ctrl -> Cmd mapping in stub
+      } else if (lower === 'shift') {
+        modifiers.push('shift down');
+      } else if (lower === 'alt') {
+        modifiers.push('option down');
+      } else if (lower === 'meta') {
+        modifiers.push('command down');
+      } else {
+        textKeys.push(k);
+        break;
+>>>>>>> cross-platform
       }
     }
 
     if (textKeys.length === 0) return;
 
+<<<<<<< HEAD
     const firstKey = mapToKeystroke(textKeys[0]);
     if (!firstKey) return;
 
@@ -196,10 +278,28 @@ export class DarwinPlatform implements Platform {
         if (k) {
           osa(`tell application "System Events" to keystroke "${k}"`);
         }
+=======
+    const first = mapKey(textKeys[0]);
+    if (!first) return;
+
+    const modPart = modifiers.length > 0
+      ? ` using {${modifiers.join(', ')}}`
+      : '';
+
+    // First key with modifiers
+    osa(`tell application "System Events" to keystroke "${first}"${modPart}`);
+
+    // Remaining keys (sequential, no modifiers)
+    for (let i = 1; i < textKeys.length; i++) {
+      const k = mapKey(textKeys[i]);
+      if (k) {
+        osa(`tell application "System Events" to keystroke "${k}"`);
+>>>>>>> cross-platform
       }
     }
   }
 
+<<<<<<< HEAD
   // ── Terminal launcher ──────────────────────────────────────
 
   launchTerminal(title: string): number | null {
@@ -207,12 +307,23 @@ export class DarwinPlatform implements Platform {
 
     // Use Terminal.app for now — open a new window with the given title
     const activateScript = [
+=======
+  // -- Terminal launcher ------------------------------------------------------
+
+  launchTerminal(title: string): number | null {
+    const before = new Set(this.findWindows().map((w) => w.hwnd));
+    osa([
+>>>>>>> cross-platform
       'tell application "Terminal"',
       '  activate',
       `  set custom title of front window to "${title.replace(/"/g, '\\"')}"`,
       'end tell',
+<<<<<<< HEAD
     ].join('\n');
     osa(activateScript);
+=======
+    ].join('\n'));
+>>>>>>> cross-platform
 
     // Poll for new PID
     for (let i = 0; i < 20; i++) {
@@ -226,7 +337,11 @@ export class DarwinPlatform implements Platform {
     return null;
   }
 
+<<<<<<< HEAD
   // ── Foreground window (via osascript) ─────────────────────
+=======
+  // -- Foreground window ----------------------------------------------------
+>>>>>>> cross-platform
 
   getActiveWindow(): number | null {
     const script = [
