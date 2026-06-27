@@ -1,0 +1,138 @@
+# voice_claude 测试计划
+
+> 按层级划分 — 依赖语音 vs 不依赖语音 — 独立日志文件
+
+## 日志文件
+
+| 文件 | 组件 | 内容 |
+|------|------|------|
+| `logs/http.log` | HTTP 服务器 | 请求/响应/延迟/错误 |
+| `logs/delivery.log` | 投递 | 投递成功/失败/延迟 |
+| `logs/router.log` | 路由 | 路由决策/LLM调用/命令 |
+| `logs/registry.log` | 实例管理 | 窗口发现/创建/销毁 |
+| `logs/asr.log` | ASR | 识别结果/错误/降级 |
+| `logs/metrics.log` | 指标 | 聚合统计 |
+
+---
+
+## L1: 单元测试 (无需语音, 无需窗口)
+
+### config
+| # | 测试 | 验证 |
+|---|------|------|
+| T1.1 | 默认配置生成 | Config.defaults() 返回有效对象 |
+| T1.2 | JSON 序列化往返 | save→load 一致 |
+| T1.3 | 缺少文件回退默认 | 文件不存在→默认值 |
+| T1.4 | 部分覆盖 | JSON 只覆盖指定字段 |
+
+### logger
+| # | 测试 | 验证 |
+|---|------|------|
+| T1.5 | 各组件写不同文件 | http→http.log, delivery→delivery.log |
+| T1.6 | JSON 格式 | 每行合法 JSON |
+| T1.7 | 指标计数 | delivery计数/错误/平均延迟 |
+
+### router (mock InstanceRegistry)
+| # | 测试 | 验证 |
+|---|------|------|
+| T1.8 | 空窗口列表 | resolve() 不抛异常 |
+| T1.9 | 切换命令匹配 | "切换到 terminal-2" → target=terminal-2 |
+| T1.10 | 切换命令无匹配 | "切换到xxx" → 不吞,继续路由 |
+| T1.11 | 创建命令 | "新建窗口" → 调用 registry.create() |
+| T1.12 | 前台优先 | getActive 返回窗口→直接返回 |
+| T1.13 | 双速路由 | 非Claude→立即返回 lastUsed |
+| T1.14 | LLM 超时 | 模拟网络超时→回退默认 |
+
+### registry (mock Python 脚本)
+| # | 测试 | 验证 |
+|---|------|------|
+| T1.15 | scan 空结果 | execSync 返回空→list()=[]
+| T1.16 | scan 解析 | "hwnd|title"→正确解析 |
+| T1.17 | 去重 | 同名窗口不重复注册 |
+| T1.18 | Schema 默认 | 新窗口从标题提取 task |
+
+---
+
+## L2: 集成测试 (需要HTTP, 无需语音)
+
+### HTTP API
+| # | 测试 | 验证 |
+|---|------|------|
+| T2.1 | GET / | 返回 speech.html |
+| T2.2 | GET /status | 返回 {target,count,windows} |
+| T2.3 | GET /metrics | 返回 {delivered,errors,avgLatencyMs} |
+| T2.4 | POST /send | curl -d '{"text":"测试"}' → 200 |
+| T2.5 | POST 空体 | 返回 200, ok=false |
+| T2.6 | CORS | OPTIONS 返回正确头 |
+| T2.7 | 并发 POST | 10并发→全部返回 200 |
+
+### 投递链 (mock 窗口)
+| # | 测试 | 验证 |
+|---|------|------|
+| T2.8 | 剪贴板写入 | clipboard.writeText→读回一致 |
+| T2.9 | 粘贴模拟 | koffi keybd_event 无异常 |
+| T2.10 | 窗口聚焦 | focus_win.py 执行不报错 |
+| T2.11 | 端到端 | curl POST→日志出现 [voice] 记录 |
+
+---
+
+## L3: 系统测试 (需要麦克风, 需要Chrome)
+
+### 语音识别
+| # | 测试 | 验证 |
+|---|------|------|
+| T3.1 | Chrome 启动 | --app 模式窗口弹出 |
+| T3.2 | 麦克风权限 | getUserMedia 成功 |
+| T3.3 | SR 启动 | 点击开始→SR started |
+| T3.4 | 语音检测 | 说话→onspeechstart 触发 |
+| T3.5 | 中文短句 | "你好" → 识别为"你好" |
+| T3.6 | 中文长句 | "帮我修复认证模块的bug" → 完整识别 |
+| T3.7 | 噪声过滤 | 不说话→不误识别 |
+| T3.8 | 代理连通 | SR 不报 network 错误 |
+
+### 端到端
+| # | 测试 | 验证 |
+|---|------|------|
+| T3.9 | 语音→路由 | 说"帮我修bug"→日志显示路由到某窗口 |
+| T3.10 | 语音→投递 | 说"你好"→目标窗口出现"你好" |
+| T3.11 | 连续对话 | 说3句→3条都投递 |
+| T3.12 | 切换命令 | "切换到 terminal-2"→目标切换 |
+| T3.13 | 前台跟随 | 切到terminal-3→后续消息到terminal-3 |
+| T3.14 | 空窗口投递 | 关掉所有Claude→贴前台 |
+
+---
+
+## L4: 压力测试 (需要语音)
+
+| # | 测试 | 验证 |
+|---|------|------|
+| T4.1 | 快速连续 | 1秒内说5个短句→5条都投递 |
+| T4.2 | 长时间运行 | 启动后1小时不崩溃 |
+| T4.3 | Chrome 重启 | 关掉Chrome→Electron不离线 |
+| T4.4 | 内存泄漏 | 1000次投递→内存无明显增长 |
+
+---
+
+## 不需要语音的测试 (可直接运行)
+
+```
+L1: T1.1 - T1.18  (18个单元测试, mock依赖)
+L2: T2.1 - T2.11  (11个集成测试, 需要Electron运行)
+```
+
+## 需要语音的测试
+
+```
+L3: T3.1 - T3.14  (14个系统测试, 需要人说话)
+L4: T4.1 - T4.4   (4个压力测试, 需要人说话)
+```
+
+## 日志验证
+
+```bash
+# 运行后检查各层日志
+cat logs/http.log | jq .   # HTTP请求
+cat logs/delivery.log | jq .  # 投递记录
+cat logs/router.log | jq .  # 路由决策
+cat logs/metrics.log | jq .  # 指标
+```
