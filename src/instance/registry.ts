@@ -21,15 +21,26 @@ export interface Instance {
   schema: WindowSchema;
 }
 
+import * as https from 'https';
+
 function defaultSchema(title: string): WindowSchema {
-  // 从标题提取任务名（Claude Code 标题格式：✳ task-name）
   const m = title.match(/✳\s*(.+)/);
-  return {
-    labels: [],
-    task: m ? m[1].trim() : title.slice(0, 40),
-    project: '',
-    context: '',
-  };
+  const task = m ? m[1].trim() : title.slice(0, 40);
+  // 异步补全 labels/project (不阻塞)
+  const s: WindowSchema = { labels: [], task, project: '', context: '' };
+  if (task) {
+    const body = JSON.stringify({ model: 'deepseek-chat', messages: [
+      { role: 'system', content: '从任务名提取标签。返回JSON: {"labels":["标签1","标签2"],"project":"项目名"}。只返回JSON。' },
+      { role: 'user', content: `任务: "${task}"` }
+    ], temperature: 0, max_tokens: 80 });
+    const req = https.request('https://api.deepseek.com/v1/chat/completions', { method: 'POST', timeout: 4000, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-938dfb4cb1e741ed960e2882da9d2eea' } }, res => {
+      let d = ''; res.on('data', c => d += c); res.on('end', () => {
+        try { const j = JSON.parse(JSON.parse(d).choices[0].message.content); if (j.labels) s.labels = j.labels; if (j.project) s.project = j.project; } catch {}
+      });
+    });
+    req.on('error', () => {}); req.end();
+  }
+  return s;
 }
 
 export class InstanceRegistry {
