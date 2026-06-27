@@ -6,7 +6,11 @@
   "scripts": {
     "build": "tsc",
     "start": "tsc && electron .",
-    "dev": "tsc && node dev.js"
+    "test:asr": "ts-node test/asr/run.ts",
+    "test:asr:jest": "jest --testPathPattern='test/asr/test_spec' --testTimeout=30000",
+    "test:unit": "jest --testPathPattern='test/unit' --testTimeout=30000",
+    "test:all": "jest --testPathPattern='test/' --testTimeout=30000",
+    "test": "jest --testPathPattern='test/unit' --testTimeout=30000"
   },
   "dependencies": {
     "electron": "^34.5.8",
@@ -14,7 +18,11 @@
     "vosk-browser": "^0.0.8"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "electron-reload": "^2.0.0-alpha.1",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.9.2",
     "typescript": "^5.5.0"
   }
 }

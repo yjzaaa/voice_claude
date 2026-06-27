@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASR Test Harness - Capture</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:20px}
+.container{max-width:600px;margin:0 auto}
+h1{font-size:1.5em;margin-bottom:16px;color:#00e676}
+.card{background:#16213e;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:1em;color:#aaa;margin-bottom:12px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:.85em;color:#888;margin-bottom:4px}
+.form-group input[type="text"]{width:100%;padding:8px 12px;background:#0f3460;border:1px solid #1a4a7a;border-radius:4px;color:#e0e0e0;font-size:1em;outline:none}
+.form-group input[type="text"]:focus{border-color:#00e676}
+.controls{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.btn{padding:10px 24px;border:none;border-radius:4px;cursor:pointer;font-size:1em;font-weight:600}
+.btn-record{background:#00e676;color:#1a1a2e}
+.btn-record:hover{background:#00c853}
+.btn-record:disabled{background:#555;color:#888;cursor:not-allowed}
+.btn-save{background:#2196f3;color:#fff;font-size:.85em;padding:8px 16px}
+.btn-save:hover{background:#1976d2}
+#status{font-size:.85em;color:#888;flex:1;text-align:right}
+.recording-indicator{display:none;color:#ff5252;font-weight:700;animation:pulse 1s ease-in-out infinite;margin-top:8px}
+.recording-indicator.active{display:block}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.countdown{font-size:2em;text-align:center;color:#00e676;margin-top:8px}
+#fixtureList{list-style:none;padding:0}
+#fixtureList li{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #0f3460;font-size:.85em}
+#fixtureList li:last-child{border-bottom:none}
+#fixtureList .fixture-name{color:#00e676;font-family:monospace}
+#fixtureList .fixture-text{color:#aaa;font-style:italic}
+#fixtureList .empty{color:#555;text-align:center;padding:12px;font-style:italic}
+.download-pending{display:none;margin-top:12px;padding:12px;background:#0f3460;border-radius:4px}
+.download-pending.active{display:block}
+.download-pending .file-info{font-size:.85em;margin-bottom:8px;color:#aaa}
+.download-pending .btn-group{display:flex;gap:8px}
+#saveHint{display:none;margin-top:8px;font-size:.8em;color:#ff9800}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>ASR Test Harness - Capture</h1>
+
+<div class="card">
+<h2>Record New Fixture</h2>
+<div class="form-group">
+<label for="fixtureName">File name (without extension):</label>
+<input type="text" id="fixtureName" placeholder="e.g. hello, test-command">
+</div>
+<div class="form-group">
+<label for="expectedText">Expected text (spoken content):</label>
+<input type="text" id="expectedText" placeholder="e.g. 你好世界">
+</div>
+<div class="controls">
+<button id="recordBtn" class="btn btn-record">Record (5s)</button>
+<div id="status">Ready</div>
+</div>
+<div id="recordingIndicator" class="recording-indicator">Recording...</div>
+<div id="countdown" class="countdown"></div>
+<div id="downloadPending" class="download-pending">
+<div class="file-info">Recording complete. Save files to <code>test/asr/fixtures/</code>:</div>
+<div class="btn-group">
+<button id="savePcmBtn" class="btn btn-save">Save .pcm</button>
+<button id="saveTxtBtn" class="btn btn-save">Save .txt</button>
+</div>
+<div id="saveHint">Files were downloaded. Move them to <code>test/asr/fixtures/</code> in the project directory.</div>
+</div>
+</div>
+
+<div class="card">
+<h2>Session History</h2>
+<ul id="fixtureList">
+<li class="empty">No fixtures recorded this session</li>
+</ul>
+</div>
+</div>
+
+<script>
+const SAMPLE_RATE = 16000;
+const RECORD_DURATION_MS = 5000;
+
+const fixtureNameEl = document.getElementById('fixtureName');
+const expectedTextEl = document.getElementById('expectedText');
+const recordBtn = document.getElementById('recordBtn');
+const statusEl = document.getElementById('status');
+const recordingIndicator = document.getElementById('recordingIndicator');
+const countdownEl = document.getElementById('countdown');
+const downloadPending = document.getElementById('downloadPending');
+const savePcmBtn = document.getElementById('savePcmBtn');
+const saveTxtBtn = document.getElementById('saveTxtBtn');
+const saveHint = document.getElementById('saveHint');
+const fixtureList = document.getElementById('fixtureList');
+
+let audioCtx = null;
+let stream = null;
+let recordedChunks = [];
+let recordingTimer = null;
+let pcmBlob = null;
+let currentFixtureName = '';
+
+function log(msg) { statusEl.textContent = msg; }
+
+function sanitizeFilename(name) {
+return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'recording';
+}
+
+function addFixtureToList(name, expected) {
+const empty = fixtureList.querySelector('.empty');
+if (empty) empty.remove();
+const li = document.createElement('li');
+li.innerHTML = `<span class="fixture-name">${name}</span> <span class="fixture-text">${expected}</span>`;
+fixtureList.prepend(li);
+}
+
+async function startRecording() {
+if (!fixtureNameEl.value.trim() && !expectedTextEl.value.trim()) {
+log('Please enter a file name or expected text');
+return;
+}
+
+const name = fixtureNameEl.value.trim() || sanitizeFilename(expectedTextEl.value.trim()).slice(0, 30);
+currentFixtureName = name;
+
+recordBtn.disabled = true;
+recordBtn.textContent = 'Recording...';
+recordingIndicator.classList.add('active');
+downloadPending.classList.remove('active');
+saveHint.style.display = 'none';
+recordedChunks = [];
+
+try {
+if (!stream) {
+stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+}
+if (!audioCtx) {
+audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+}
+
+const source = audioCtx.createMediaStreamSource(stream);
+const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+processor.onaudioprocess = function(e) {
+const input = e.inputBuffer.getChannelData(0);
+const pcm = new Int16Array(input.length);
+for (let i = 0; i < input.length; i++) {
+pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32768)));
+}
+recordedChunks.push(pcm);
+};
+
+source.connect(processor);
+processor.connect(audioCtx.destination);
+
+const startTime = Date.now();
+recordingTimer = setInterval(() => {
+const elapsed = Date.now() - startTime;
+const remaining = Math.max(0, Math.ceil((RECORD_DURATION_MS - elapsed) / 1000));
+countdownEl.textContent = remaining + 's';
+if (remaining <= 0) {
+stopRecording(source, processor);
+}
+}, 100);
+
+log('Recording ' + RECORD_DURATION_MS / 1000 + 's...');
+} catch (e) {
+log('Error: ' + e.message);
+recordBtn.disabled = false;
+recordBtn.textContent = 'Record (5s)';
+recordingIndicator.classList.remove('active');
+countdownEl.textContent = '';
+}
+}
+
+function stopRecording(source, processor) {
+if (recordingTimer) {
+clearInterval(recordingTimer);
+recordingTimer = null;
+}
+
+try { source.disconnect(); } catch {}
+try { processor.disconnect(); } catch {}
+
+countdownEl.textContent = 'Done';
+recordingIndicator.classList.remove('active');
+recordBtn.disabled = false;
+recordBtn.textContent = 'Record (5s)';
+
+// Merge PCM data
+const totalSamples = recordedChunks.reduce((s, c) => s + c.length, 0);
+const merged = new Int16Array(totalSamples);
+let offset = 0;
+for (const chunk of recordedChunks) {
+merged.set(chunk, offset);
+offset += chunk.length;
+}
+
+// Create PCM blob
+pcmBlob = new Blob([merged.buffer], { type: 'application/octet-stream' });
+
+// Show download option
+downloadPending.classList.add('active');
+const expected = expectedTextEl.value.trim();
+if (!fixtureNameEl.value.trim() && expected) {
+fixtureNameEl.value = sanitizeFilename(expected).slice(0, 30);
+}
+addFixtureToList(currentFixtureName, expected);
+log('Recording complete');
+}
+
+savePcmBtn.addEventListener('click', function() {
+if (!pcmBlob) return;
+const a = document.createElement('a');
+a.href = URL.createObjectURL(pcmBlob);
+a.download = currentFixtureName + '.pcm';
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+URL.revokeObjectURL(a.href);
+saveHint.style.display = 'block';
+log('Downloaded ' + currentFixtureName + '.pcm');
+});
+
+saveTxtBtn.addEventListener('click', function() {
+const expected = expectedTextEl.value.trim();
+if (!expected) {
+log('No expected text to save');
+return;
+}
+const blob = new Blob([expected], { type: 'text/plain;charset=utf-8' });
+const a = document.createElement('a');
+a.href = URL.createObjectURL(blob);
+a.download = currentFixtureName + '.txt';
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+URL.revokeObjectURL(a.href);
+saveHint.style.display = 'block';
+log('Downloaded ' + currentFixtureName + '.txt');
+});
+
+recordBtn.addEventListener('click', startRecording);
+
+log('Ready. Type expected text, click Record, speak clearly.');
+</script>
+</body>
+</html>

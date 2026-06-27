@@ -127,12 +127,61 @@ L3: T3.1 - T3.14  (14个系统测试, 需要人说话)
 L4: T4.1 - T4.4   (4个压力测试, 需要人说话)
 ```
 
+## L5: ASR 音频 fixture 测试 (需要预录音频)
+
+### 录制方法
+```
+1. 打开 test/asr/capture.html 在 Chrome
+2. 输入期望文本，点击录制，说话
+3. 保存 .pcm + .txt 到 test/asr/fixtures/
+```
+
+### ASR 对比测试
+
+| # | 音频 | 期望文本 | 测试后端 |
+|---|------|---------|---------|
+| T5.1 | hello.pcm | "你好" | Doubao v3 |
+| T5.2 | hello.pcm | "你好" | Chrome Web Speech |
+| T5.3 | debug.pcm | "帮我修复这个bug" | Doubao v3 |
+| T5.4 | debug.pcm | "帮我修复这个bug" | Chrome Web Speech |
+| T5.5 | switch.pcm | "切换到终端" | Doubao v3 |
+| T5.6 | long.pcm | 长句30字 | Doubao v3 |
+| T5.7 | noise.pcm | (空) | Doubao v3 → 期望 null |
+| T5.8 | english.pcm | "hello world" | Doubao v3 |
+
+### 精度指标
+
+```
+Word Error Rate (WER) < 20% → 通过
+文本相似度 > 80% → 通过
+噪音输入 → 必须返回 null 或空字符串
+```
+
+## CI 脚本
+
+```bash
+# .github/workflows/test.yml 或本地运行
+npm test              # L1 单元测试 (无硬件依赖)
+npm run test:http     # L2 HTTP 集成测试 (需要启动 Electron)
+npm run test:asr      # L5 ASR fixture 测试 (需要预录音频)
+npm run test:all      # 全部 (除 L3/L4 需人工)
+```
+
+## 测试覆盖率目标
+
+| 层 | 目标覆盖率 | 自动化 |
+|----|----------|--------|
+| L1 单元 | 80%+ | ✅ CI |
+| L2 集成 | 核心路径 | ✅ CI (需 Electron) |
+| L5 ASR | 8 条 fixture | ✅ CI (需代理) |
+| L3 系统 | 手动 | 👤 人工 |
+| L4 压力 | 手动 | 👤 人工 |
+
 ## 日志验证
 
 ```bash
-# 运行后检查各层日志
-cat logs/http.log | jq .   # HTTP请求
-cat logs/delivery.log | jq .  # 投递记录
-cat logs/router.log | jq .  # 路由决策
-cat logs/metrics.log | jq .  # 指标
+cat logs/http.log | jq '.lvl,.cmp,.msg'   # HTTP请求
+cat logs/delivery.log | jq '.target,.ms'   # 投递指标
+cat logs/router.log | jq '.reason,.target'  # 路由决策
+cat logs/registry.log | jq '.event,.title'  # 窗口变化
 ```

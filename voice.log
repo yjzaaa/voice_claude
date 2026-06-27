@@ -60,3 +60,14 @@ HTTP POST /send
 [voice]→ terminal-5 切换下窗口
 [voice]→ terminal-5 切换下窗
 🪟 create: voice_claude
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP GET /status
+HTTP GET /status
+HTTP POST /asr
+HTTP POST /asr
+HTTP POST /asr

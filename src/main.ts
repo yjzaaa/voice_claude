@@ -1,16 +1,21 @@
 /**
- * voice_claude — Electron + Chrome App + 路由
+ * voice_claude — Electron + Vosk ASR + 路由
  * Uses the cross-platform Platform abstraction for window ops.
  */
-import { app, BrowserWindow, Tray, clipboard, nativeImage } from 'electron';
+
+// electron-reload: 开发模式自动重载（文件变化时重启 Electron）
+try { require('electron-reload')(__dirname, { electron: require('electron') }); } catch {}
+
+import { app, BrowserWindow, Tray, clipboard, nativeImage, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
-import { exec } from 'child_process';
 import { createPlatform } from './platform';
 import { InstanceRegistry } from './instance/registry';
 import { Router } from './instance/router';
 import { logger } from './logger';
+import { transcribe } from './asr';
+import { start as startVosk, isModelAvailable as isVoskModelAvailable } from './asr/vosk';
 
 const log = (cmp: string, msg: string, extra?: any) => logger.info(cmp, msg, extra);
 
@@ -74,13 +79,39 @@ http.createServer((req, res) => {
     });
     return;
   }
+  // ASR fallback endpoint — receive PCM audio, return recognized text (Doubao)
+  if (req.method === 'POST' && req.url === '/asr') {
+    const chunks: Buffer[] = [];
+    req.on('data', (d: Buffer) => chunks.push(d));
+    req.on('end', async () => {
+      try {
+        logger.info('asr', 'PCM fallback', { bytes: chunks.reduce((s, c) => s + c.length, 0) });
+        const audio = Buffer.concat(chunks);
+        const text = await transcribe(audio, { sampleRate: 16000 });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: text || '', ok: !!text }));
+      } catch (e: any) {
+        logger.error('asr', 'fallback error', { message: e.message });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: '', ok: false }));
+      }
+    });
+    return;
+  }
+  // Serve Vosk model files for vosk-browser (WASM)
+  if (req.method === 'GET' && req.url?.startsWith('/model/')) {
+    const modelFile = path.join(__dirname, '..', 'models', decodeURIComponent(req.url.slice(7)));
+    if (fs.existsSync(modelFile)) {
+      res.writeHead(200, { 'Content-Type': 'application/gzip' });
+      res.end(fs.readFileSync(modelFile));
+    } else {
+      res.writeHead(404); res.end('Model not found');
+    }
+    return;
+  }
   res.writeHead(404); res.end();
 }).listen(9877, '127.0.0.1', () => {
   logger.info('http', '启动', { port: 9877 });
-  const chrome = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-  const chrome2 = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe';
-  const url = 'http://127.0.0.1:9877';
-  exec(`"${chrome}" --proxy-server=http://127.0.0.1:7890 --proxy-bypass-list="127.0.0.1;localhost" --app=${url}`);
 });
 
 // Window discovery + live monitoring
@@ -98,6 +129,18 @@ app.whenReady().then(() => {
   win.on('close', e => { if (!isQuitting) { e.preventDefault(); win?.hide(); } });
   new Tray(icon('#00e676')).on('click', () => win?.isVisible() ? win?.hide() : win?.show());
   win.show();
+
+  // Start Vosk ASR as primary recognition (hidden BrowserWindow with vosk-browser WASM)
+  if (isVoskModelAvailable()) {
+    logger.info('vosk', 'starting Vosk ASR');
+    startVosk((text: string) => {
+      logger.info('vosk', 'recognized', { text: text.slice(0, 60) });
+      deliver(text);
+    });
+  } else {
+    logger.info('vosk', 'model not found — Vosk ASR disabled');
+    logger.info('vosk', 'place vosk-model-small-cn-0.22.tar.gz in models/ directory');
+  }
 });
 
 app.on('window-all-closed', () => {});

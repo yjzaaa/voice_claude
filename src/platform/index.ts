@@ -2,21 +2,11 @@
  * Cross-platform abstraction for window management and keyboard simulation.
  *
  * Platform        Window ID      Key implementation
-<<<<<<< HEAD
- * ────────        ─────────      ─────────────────
-=======
- * --------        ---------      -----------------
->>>>>>> cross-platform
  * win32           HWND (number)  Python ctypes / koffi keybd_event
  * darwin          PID  (number)  osascript (AppleScript)
  * linux           X11 ID (number) xdotool
  */
 
-<<<<<<< HEAD
-// ── Types ──────────────────────────────────────────────────────
-=======
-// -- Types ------------------------------------------------------------------
->>>>>>> cross-platform
 
 export interface WindowInfo {
   hwnd: number;
@@ -61,11 +51,6 @@ export interface Platform {
   getActiveWindow(): number | null;
 }
 
-<<<<<<< HEAD
-// ── Factory ────────────────────────────────────────────────────
-=======
-// -- Factory ------------------------------------------------------------------
->>>>>>> cross-platform
 
 let _platform: Platform | null = null;
 
@@ -94,13 +79,6 @@ export function createPlatform(): Platform {
       break;
     }
     default:
-<<<<<<< HEAD
-      // 默认回退 Win32
-      const { Win32Platform: FallbackPlatform } = require('./win32');
-      _platform = new FallbackPlatform();
-=======
-      throw new Error(`Unsupported platform: ${process.platform}`);
->>>>>>> cross-platform
   }
 
   return _platform!;

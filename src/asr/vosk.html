@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Vosk ASR</title></head><body>
+<script>
+// Vosk ASR 隐藏页面 — 使用 vosk-browser (WASM)
+// 在主进程通过 Electron hidden BrowserWindow 加载
+// 识别结果通过 IPC (voiceAPI) 发送到主进程
+
+const MODEL_NAME = 'vosk-model-small-cn-0.22';
+const MODEL_URL = 'http://127.0.0.1:9877/model/' + MODEL_NAME + '.tar.gz';
+
+let model = null;
+let recognizer = null;
+let mediaStream = null;
+let audioContext = null;
+let sourceNode = null;
+let processorNode = null;
+let isRunning = false;
+let finalText = '';
+
+// 加载 vosk-browser
+const script = document.createElement('script');
+script.src = '../../node_modules/vosk-browser/dist/vosk.js';
+script.onload = init;
+script.onerror = function () { console.error('[Vosk] Failed to load vosk-browser'); };
+document.head.appendChild(script);
+
+async function init() {
+  if (typeof Vosk === 'undefined') {
+    console.error('[Vosk] vosk-browser not loaded');
+    return;
+  }
+  console.log('[Vosk] loading model...');
+  try {
+    model = await Vosk.createModel(MODEL_URL, -1);
+    console.log('[Vosk] model ready');
+    startCapture();
+  } catch (e) {
+    console.error('[Vosk] model load failed:', e.message);
+  }
+}
+
+async function startCapture() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: false,
+      audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1, sampleRate: 16000 },
+    });
+    audioContext = new AudioContext({ sampleRate: 16000 });
+    sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+
+    recognizer = new model.KaldiRecognizer(16000);
+    recognizer.on('result', function (msg) {
+      var text = (msg.result.text || '').trim();
+      if (text && text !== finalText) {
+        finalText = text;
+        if (window.voiceAPI && window.voiceAPI.send) {
+          window.voiceAPI.send(text);
+        }
+      }
+    });
+
+    processorNode.onaudioprocess = function (event) {
+      try {
+        recognizer.acceptWaveform(event.inputBuffer);
+      } catch (e) {
+        // ignore acceptWaveform errors
+      }
+    };
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
+    isRunning = true;
+    console.log('[Vosk] capture started');
+  } catch (e) {
+    console.error('[Vosk] capture failed:', e.message);
+    setTimeout(startCapture, 2000);
+  }
+}
+</script></body></html>

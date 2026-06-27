@@ -1,9 +1,5 @@
 /**
-<<<<<<< HEAD
- * Linux Platform — Stub implementation
-=======
- * Linux Platform -- Stub implementation
->>>>>>> cross-platform
+ * Linux Platform implementation
  *
  * Uses xdotool (X11) for window management and keyboard simulation.
  *
@@ -23,11 +19,6 @@ function run(cmd: string): string {
 }
 
 export class LinuxPlatform implements Platform {
-<<<<<<< HEAD
-  // ── Window discovery ───────────────────────────────────────
-=======
-  // -- Window discovery -------------------------------------------------------
->>>>>>> cross-platform
 
   findWindows(): WindowInfo[] {
     const raw = run('xdotool search --name "claude" 2>/dev/null');
@@ -44,31 +35,13 @@ export class LinuxPlatform implements Platform {
       .filter((w): w is WindowInfo => w !== null);
   }
 
-<<<<<<< HEAD
-  // ── Window focusing ────────────────────────────────────────
-=======
-  // -- Window focusing --------------------------------------------------------
->>>>>>> cross-platform
-
   focusWindow(hwnd: number): void {
     run(`xdotool windowactivate ${hwnd} 2>/dev/null`);
   }
 
-<<<<<<< HEAD
-  // ── Window closing ─────────────────────────────────────────
-=======
-  // -- Window closing ---------------------------------------------------------
->>>>>>> cross-platform
-
   closeWindow(hwnd: number): void {
     run(`xdotool windowclose ${hwnd} 2>/dev/null`);
   }
-
-<<<<<<< HEAD
-  // ── Window watching (poll-based) ───────────────────────────
-=======
-  // -- Window watching (poll-based) -------------------------------------------
->>>>>>> cross-platform
 
   watchWindows(callback: (e: WatchEvent) => void): WatchHandle {
     let stopped = false;
@@ -103,114 +76,50 @@ export class LinuxPlatform implements Platform {
     return { stop: () => { stopped = true; } };
   }
 
-<<<<<<< HEAD
-  // ── Keyboard simulation (via xdotool) ──────────────────────
-=======
-  // -- Keyboard simulation (via xdotool) --------------------------------------
->>>>>>> cross-platform
-
   sendKeys(...keys: string[]): void {
     if (keys.length === 0) return;
 
-<<<<<<< HEAD
-    // xdotool key syntax: ctrl+v, Return, etc.
+    const keyMap: Record<string, string> = {
+      ctrl: 'ctrl',
+      v: 'v',
+      enter: 'Return',
+      shift: 'shift',
+      alt: 'alt',
+      tab: 'Tab',
+      escape: 'Escape',
+      backspace: 'BackSpace',
+      up: 'Up',
+      down: 'Down',
+      left: 'Left',
+      right: 'Right',
+      space: 'space',
+    };
+
     const xdotoolKeys = keys
-      .map((k) => {
-        switch (k.toLowerCase()) {
-          case 'ctrl':
-            return 'ctrl';
-          case 'shift':
-            return 'shift';
-          case 'alt':
-            return 'alt';
-          case 'v':
-            return 'v';
-          case 'enter':
-            return 'Return';
-          case 'escape':
-            return 'Escape';
-          case 'tab':
-            return 'Tab';
-          case 'space':
-            return 'space';
-          case 'backspace':
-            return 'BackSpace';
-          case 'up':
-            return 'Up';
-          case 'down':
-            return 'Down';
-          case 'left':
-            return 'Left';
-          case 'right':
-            return 'Right';
-          default:
-            return k;
-        }
-      })
-      .join('+'); // xdotool chords with +
-=======
-    const xdotoolKeys = keys
-      .map((k) => {
-        switch (k.toLowerCase()) {
-          case 'ctrl':    return 'ctrl';
-          case 'shift':   return 'shift';
-          case 'alt':     return 'alt';
-          case 'v':       return 'v';
-          case 'enter':   return 'Return';
-          case 'escape':  return 'Escape';
-          case 'tab':     return 'Tab';
-          case 'space':   return 'space';
-          case 'backspace': return 'BackSpace';
-          case 'up':      return 'Up';
-          case 'down':    return 'Down';
-          case 'left':    return 'Left';
-          case 'right':   return 'Right';
-          default:        return k;
-        }
-      })
-      .join('+'); // xdotool chords with '+'
->>>>>>> cross-platform
+      .map(k => keyMap[k.toLowerCase()] || k)
+      .join('+');
 
     run(`xdotool key ${xdotoolKeys} 2>/dev/null`);
   }
 
-<<<<<<< HEAD
-  // ── Terminal launcher ──────────────────────────────────────
-=======
-  // -- Terminal launcher ------------------------------------------------------
->>>>>>> cross-platform
-
   launchTerminal(title: string): number | null {
     const before = new Set(this.findWindows().map((w) => w.hwnd));
 
-    // Try common terminal emulators; fall back to xterm
-<<<<<<< HEAD
-    const terminalCmd = [
-=======
-    const commands = [
->>>>>>> cross-platform
+    const cmds = [
       `gnome-terminal --title="${title.replace(/"/g, '\\"')}" -- bash -c claude`,
       `konsole --title "${title.replace(/"/g, '\\"')}" -e claude`,
       `xterm -title "${title.replace(/"/g, '\\"')}" -e claude`,
     ];
 
-<<<<<<< HEAD
-    for (const cmd of terminalCmd) {
+    for (const cmd of cmds) {
       try {
-        spawn(cmd, { shell: true, detached: true, stdio: 'ignore' });
-        break; // First one that doesn't throw
-=======
-    for (const cmd of commands) {
-      try {
-        spawn(cmd, { shell: true, detached: true, stdio: 'ignore' });
+        execSync(cmd, { timeout: 5000 });
         break;
->>>>>>> cross-platform
       } catch {
         continue;
       }
     }
 
-    // Poll for new window
     for (let i = 0; i < 20; i++) {
       const deadline = Date.now() + 500;
       while (Date.now() < deadline) { /* spin */ }
@@ -221,12 +130,6 @@ export class LinuxPlatform implements Platform {
     }
     return null;
   }
-
-<<<<<<< HEAD
-  // ── Foreground window (via xdotool) ────────────────────────
-=======
-  // -- Foreground window (via xdotool) ----------------------------------------
->>>>>>> cross-platform
 
   getActiveWindow(): number | null {
     const raw = run('xdotool getactivewindow 2>/dev/null');
