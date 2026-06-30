@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Doubao Recorder</title>
+</head>
+<body>
+<script>
+const api = window.recorderAPI;
+const log = window.loggerAPI?.log || ((level, cmp, msg, extra) => console.log(`[${level}][${cmp}]`, msg, extra));
+
+let ctx = null;
+let stream = null;
+let source = null;
+let processor = null;
+let chunks = [];
+let recording = false;
+let chunkCount = 0;
+let totalSamples = 0;
+let lastVoiceTime = 0;
+let maxDurationTimer = null;
+let vadTimer = null;
+
+// 配置
+const VAD_THRESHOLD = 500;        // 16-bit PCM 峰值阈值，超过视为有声
+const SILENCE_TIMEOUT = 1500;     // 静音超过 1.5 秒自动停止
+const MAX_DURATION = 30000;       // 最长录制 30 秒
+
+function logR(cmp, msg, extra) { log('info', cmp, msg, extra); }
+function logW(cmp, msg, extra) { log('warn', cmp, msg, extra); }
+function logE(cmp, msg, extra) { log('error', cmp, msg, extra); }
+
+function floatTo16BitPCM(input) {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return output;
+}
+
+function concatInt16Arrays(arrays) {
+  let total = 0;
+  for (const a of arrays) total += a.length;
+  const result = new Int16Array(total);
+  let offset = 0;
+  for (const a of arrays) {
+    result.set(a, offset);
+    offset += a.length;
+  }
+  return result;
+}
+
+function measurePeak(pcm) {
+  let peak = 0;
+  for (let i = 0; i < pcm.length; i++) {
+    peak = Math.max(peak, Math.abs(pcm[i]));
+  }
+  return peak;
+}
+
+async function initAudio() {
+  logR('recorder-renderer', 'initAudio starting');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      }
+    });
+    ctx = new AudioContext({ sampleRate: 16000 });
+    source = ctx.createMediaStreamSource(stream);
+    processor = ctx.createScriptProcessor(4096, 1, 1);
+
+    processor.onaudioprocess = (e) => {
+      if (!recording) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const pcm = floatTo16BitPCM(input);
+      chunks.push(pcm);
+      chunkCount++;
+      totalSamples += pcm.length;
+      const peak = measurePeak(pcm);
+      const now = Date.now();
+      if (peak > VAD_THRESHOLD) {
+        lastVoiceTime = now;
+      }
+      if (chunkCount % 10 === 0) {
+        logR('recorder-renderer', 'audio chunk', { chunkCount, totalSamples, peak, voice: peak > VAD_THRESHOLD });
+      }
+    };
+
+    source.connect(processor);
+    processor.connect(ctx.destination);
+
+    logR('recorder-renderer', 'audio initialized');
+    api.ready();
+  } catch (err) {
+    logE('recorder-renderer', 'init failed', { error: err.message });
+    setTimeout(initAudio, 2000);
+  }
+}
+
+function startRecording() {
+  if (recording) return;
+  chunks = [];
+  chunkCount = 0;
+  totalSamples = 0;
+  recording = true;
+  lastVoiceTime = Date.now();
+  logR('recorder-renderer', 'recording started');
+
+  // 最长录制时间保护
+  maxDurationTimer = setTimeout(() => {
+    logW('recorder-renderer', 'max duration reached, auto-stopping');
+    stopRecording();
+  }, MAX_DURATION);
+
+  // VAD：定期检查是否长时间静音
+  vadTimer = setInterval(() => {
+    if (!recording) return;
+    const silenceMs = Date.now() - lastVoiceTime;
+    if (silenceMs > SILENCE_TIMEOUT) {
+      logR('recorder-renderer', 'silence detected, auto-stopping', { silenceMs });
+      stopRecording();
+    }
+  }, 200);
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  if (maxDurationTimer) { clearTimeout(maxDurationTimer); maxDurationTimer = null; }
+  if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
+  logR('recorder-renderer', 'recording stopped', { chunkCount, totalSamples });
+
+  if (chunks.length === 0) {
+    logW('recorder-renderer', 'no audio captured');
+    api.sendPcm(new ArrayBuffer(0));
+    return;
+  }
+
+  const pcm = concatInt16Arrays(chunks);
+  chunks = [];
+  const peak = measurePeak(pcm);
+  logR('recorder-renderer', 'sending pcm', { bytes: pcm.byteLength, peak });
+  api.sendPcm(pcm.buffer);
+}
+
+api.onStart(startRecording);
+api.onStop(stopRecording);
+
+initAudio();
+</script>
+</body>
+</html>

@@ -1,249 +1,208 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ASR Test Harness - Capture</title>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>🎤 ASR 录音工具</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:20px}
-.container{max-width:600px;margin:0 auto}
-h1{font-size:1.5em;margin-bottom:16px;color:#00e676}
-.card{background:#16213e;border-radius:8px;padding:20px;margin-bottom:16px}
-.card h2{font-size:1em;color:#aaa;margin-bottom:12px}
-.form-group{margin-bottom:12px}
-.form-group label{display:block;font-size:.85em;color:#888;margin-bottom:4px}
-.form-group input[type="text"]{width:100%;padding:8px 12px;background:#0f3460;border:1px solid #1a4a7a;border-radius:4px;color:#e0e0e0;font-size:1em;outline:none}
-.form-group input[type="text"]:focus{border-color:#00e676}
-.controls{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-.btn{padding:10px 24px;border:none;border-radius:4px;cursor:pointer;font-size:1em;font-weight:600}
-.btn-record{background:#00e676;color:#1a1a2e}
-.btn-record:hover{background:#00c853}
-.btn-record:disabled{background:#555;color:#888;cursor:not-allowed}
-.btn-save{background:#2196f3;color:#fff;font-size:.85em;padding:8px 16px}
-.btn-save:hover{background:#1976d2}
-#status{font-size:.85em;color:#888;flex:1;text-align:right}
-.recording-indicator{display:none;color:#ff5252;font-weight:700;animation:pulse 1s ease-in-out infinite;margin-top:8px}
-.recording-indicator.active{display:block}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.countdown{font-size:2em;text-align:center;color:#00e676;margin-top:8px}
-#fixtureList{list-style:none;padding:0}
-#fixtureList li{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #0f3460;font-size:.85em}
-#fixtureList li:last-child{border-bottom:none}
-#fixtureList .fixture-name{color:#00e676;font-family:monospace}
-#fixtureList .fixture-text{color:#aaa;font-style:italic}
-#fixtureList .empty{color:#555;text-align:center;padding:12px;font-style:italic}
-.download-pending{display:none;margin-top:12px;padding:12px;background:#0f3460;border-radius:4px}
-.download-pending.active{display:block}
-.download-pending .file-info{font-size:.85em;margin-bottom:8px;color:#aaa}
-.download-pending .btn-group{display:flex;gap:8px}
-#saveHint{display:none;margin-top:8px;font-size:.8em;color:#ff9800}
-</style>
-</head>
-<body>
-<div class="container">
-<h1>ASR Test Harness - Capture</h1>
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;justify-content:center;padding:20px}
+.c{max-width:500px;width:100%}
+h2{text-align:center;margin-bottom:16px;font-size:1.2em}
+label{font-size:.75em;color:#888;display:block;margin:10px 0 4px}
+select,input{width:100%;padding:10px;background:#0f3460;border:1px solid #333;color:#fff;border-radius:4px;font-size:.9em}
+select option{background:#0f3460}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.btn{flex:0 0 auto!important;padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.85em}
+.btn-rec{background:#e94560;color:#fff;width:100%;margin:14px 0;font-size:1.1em;padding:16px;border-radius:8px}
+.btn-rec.recording{background:#0f3460;animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.6}}
+.btn-save{background:#00e676;color:#000}
+.btn-test{background:#444;color:#fff}
+.btn-del{background:#e94560;color:#fff;font-size:.75em;padding:4px 10px}
+#meter{width:100%;height:8px;background:#333;border-radius:4px;margin:8px 0;overflow:hidden}
+#fill{height:100%;background:#00e676;width:0%;transition:width .08s}
+#status{text-align:center;font-size:.85em;margin:6px 0;min-height:1.3em}
+audio{width:100%;margin:6px 0}
+.dim{opacity:.5;pointer-events:none}
+.hint{font-size:.7em;color:#888;text-align:center;margin:8px 0}
+.existing{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.8em;color:#888}
+.existing span{flex:1}
+</style></head><body>
+<div class="c">
+<h2>🎤 ASR 录音工具</h2>
 
-<div class="card">
-<h2>Record New Fixture</h2>
-<div class="form-group">
-<label for="fixtureName">File name (without extension):</label>
-<input type="text" id="fixtureName" placeholder="e.g. hello, test-command">
-</div>
-<div class="form-group">
-<label for="expectedText">Expected text (spoken content):</label>
-<input type="text" id="expectedText" placeholder="e.g. 你好世界">
-</div>
-<div class="controls">
-<button id="recordBtn" class="btn btn-record">Record (5s)</button>
-<div id="status">Ready</div>
-</div>
-<div id="recordingIndicator" class="recording-indicator">Recording...</div>
-<div id="countdown" class="countdown"></div>
-<div id="downloadPending" class="download-pending">
-<div class="file-info">Recording complete. Save files to <code>test/asr/fixtures/</code>:</div>
-<div class="btn-group">
-<button id="savePcmBtn" class="btn btn-save">Save .pcm</button>
-<button id="saveTxtBtn" class="btn btn-save">Save .txt</button>
-</div>
-<div id="saveHint">Files were downloaded. Move them to <code>test/asr/fixtures/</code> in the project directory.</div>
-</div>
+<label>📋 覆盖已有文件 — 选择: <span id="refreshBtn" style="cursor:pointer;color:#00e676;font-size:.7em">🔄 刷新</span></label>
+<select id="preset" onchange="onPreset()">
+  <option value="">🖊 自定义新文件...</option>
+  <option value="hello">📁 hello.pcm</option>
+  <option value="debug">📁 debug.pcm</option>
+  <option value="switch">📁 switch.pcm</option>
+</select>
+
+<label>📝 期望文本:</label>
+<input id="expected" placeholder="说话内容...">
+
+<label>📛 文件名:</label>
+<div class="row">
+  <input id="fname" placeholder="hello" value="hello">
+  <span style="flex:0 0 auto;color:#888">.pcm</span>
 </div>
 
-<div class="card">
-<h2>Session History</h2>
-<ul id="fixtureList">
-<li class="empty">No fixtures recorded this session</li>
-</ul>
+<label>🏷 标签 (逗号分隔):</label>
+<input id="tags" placeholder="greeting, test" value="greeting">
+
+<!-- 已有文件 -->
+<div id="existingFiles" style="margin:8px 0"></div>
+
+<div id="meter"><div id="fill"></div></div>
+<div id="status">就绪 — 选择预设或自定义，点击录音</div>
+
+<button class="btn-rec" id="rec">🔴 开始录音 (5秒)</button>
+
+<div class="row hidden" id="actions">
+  <button class="btn" id="playBtn">▶ 回放</button>
+  <button class="btn btn-test" id="testBtn">🧪 测试 Doubao</button>
 </div>
+
+<div class="row hidden" id="saveRow">
+  <button class="btn btn-save" id="saveBtn">💾 下载到 Downloads</button>
+  <span class="hint">直接覆盖 test/asr/fixtures/ 中的文件</span>
+</div>
+
+<div id="result"></div>
+<div class="hint">录制 — 回放确认 — 测试Doubao — 下载 — 移到fixtures</div>
 </div>
 
 <script>
-const SAMPLE_RATE = 16000;
-const RECORD_DURATION_MS = 5000;
+const presetEl=document.getElementById('preset'),expectedEl=document.getElementById('expected');
+const fnameEl=document.getElementById('fname'),tagsEl=document.getElementById('tags');
+const recBtn=document.getElementById('rec'),statusEl=document.getElementById('status');
+const fill=document.getElementById('fill'),resultEl=document.getElementById('result');
+const saveRow=document.getElementById('saveRow'),saveBtn=document.getElementById('saveBtn');
+const playBtn=document.getElementById('playBtn'),testBtn=document.getElementById('testBtn');
+const actionsEl=document.getElementById('actions'),existingDiv=document.getElementById('existingFiles');
 
-const fixtureNameEl = document.getElementById('fixtureName');
-const expectedTextEl = document.getElementById('expectedText');
-const recordBtn = document.getElementById('recordBtn');
-const statusEl = document.getElementById('status');
-const recordingIndicator = document.getElementById('recordingIndicator');
-const countdownEl = document.getElementById('countdown');
-const downloadPending = document.getElementById('downloadPending');
-const savePcmBtn = document.getElementById('savePcmBtn');
-const saveTxtBtn = document.getElementById('saveTxtBtn');
-const saveHint = document.getElementById('saveHint');
-const fixtureList = document.getElementById('fixtureList');
+let stream=null,ctx=null,proc=null,chunks=[],audioBlob=null,timer=null,countdown=0;
 
-let audioCtx = null;
-let stream = null;
-let recordedChunks = [];
-let recordingTimer = null;
-let pcmBlob = null;
-let currentFixtureName = '';
+// 加载已有文件列表
+async function loadExisting(){
+  const fixtures=['hello','debug','switch','silence'];
+  let html='<div class="existing">📂 已有: ';
+  for(const f of fixtures){
+    try{const r=await fetch('fixtures/'+f+'.pcm');if(r.ok){const buf=await r.arrayBuffer();html+=`<span>${f}.pcm (${(buf.byteLength/1024).toFixed(0)}KB)</span>`}}catch{}
+  }
+  html+='</div>';existingDiv.innerHTML=html;
+}
+loadExisting();
 
-function log(msg) { statusEl.textContent = msg; }
+async function onPreset(){
+  const opt=presetEl.options[presetEl.selectedIndex];
+  if(!opt.value){fnameEl.value='';expectedEl.value='';return}
+  fnameEl.value=opt.value;
+  // 从服务器加载期望文本
+  try{
+    const r=await fetch('http://127.0.0.1:9877/fixture-info?name='+opt.value);
+    if(r.ok){
+      const j=await r.json();
+      expectedEl.value=j.text||'';
+      tagsEl.value=(j.tags||[]).join(',');
+    }
+  }catch{}
+}
+// 刷新下拉
+document.getElementById('refreshBtn').onclick=async()=>{
+  const sel=presetEl;sel.innerHTML='<option value="">🖊 自定义新文件...</option>';
+  try{
+    const r=await fetch('http://127.0.0.1:9877/fixtures');
+    if(r.ok){
+      const j=await r.json();
+      for(const f of j.files||[]){
+        const o=document.createElement('option');o.value=f.name;o.textContent='📁 '+f.name+'.pcm ('+f.size+'B)';sel.appendChild(o);
+      }
+    }
+  }catch{}
+};
+document.getElementById('refreshBtn').click();
 
-function sanitizeFilename(name) {
-return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'recording';
+// PCM → WAV
+function pcmToWav(pcm,sr=16000){
+  const len=pcm.byteLength,buf=new ArrayBuffer(44+len),v=new DataView(buf);
+  const w=(s,o)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  w('RIFF',0);v.setUint32(4,36+len,true);w('WAVE',8);
+  w('fmt ',12);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+  w('data',36);v.setUint32(40,len,true);
+  new Uint8Array(buf,44).set(new Uint8Array(pcm));
+  return new Blob([buf],{type:'audio/wav'});
+}
+function concat(arr){let n=0;for(let a of arr)n+=a.length;let r=new Uint8Array(n),o=0;for(let a of arr){r.set(a,o);o+=a.length}return r}
+
+async function start(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1}});
+    ctx=new AudioContext({sampleRate:16000});
+    const src=ctx.createMediaStreamSource(stream);
+    proc=ctx.createScriptProcessor(4096,1,1);
+    src.connect(proc);proc.connect(ctx.destination);
+    chunks=[];countdown=5;audioBlob=null;
+    recBtn.textContent='🔴 录音中... ('+countdown+'s)';recBtn.classList.add('recording');
+    statusEl.textContent='🎤 说话...';saveRow.classList.add('hidden');actionsEl.classList.add('hidden');
+    proc.onaudioprocess=e=>{
+      const input=e.inputBuffer.getChannelData(0);
+      const pcm=new Int16Array(input.length);let sum=0;
+      for(let i=0;i<input.length;i++){pcm[i]=Math.max(-1,Math.min(1,input[i]))*0x7FFF;sum+=Math.abs(pcm[i])}
+      chunks.push(new Uint8Array(pcm.buffer));
+      fill.style.width=Math.min(100,sum/input.length*200)+'%';
+    };
+    timer=setInterval(()=>{countdown--;recBtn.textContent='🔴 录音中... ('+countdown+'s)';if(countdown<=0)stop()},1000);
+  }catch(e){statusEl.textContent='❌ 麦克风: '+e.message}
 }
 
-function addFixtureToList(name, expected) {
-const empty = fixtureList.querySelector('.empty');
-if (empty) empty.remove();
-const li = document.createElement('li');
-li.innerHTML = `<span class="fixture-name">${name}</span> <span class="fixture-text">${expected}</span>`;
-fixtureList.prepend(li);
+function stop(){
+  clearInterval(timer);
+  if(proc){proc.disconnect();proc=null}
+  if(ctx){ctx.close();ctx=null}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  recBtn.textContent='🔴 开始录音 (5秒)';recBtn.classList.remove('recording');
+  if(!chunks.length){statusEl.textContent='⚠ 没有录到音频';return}
+  const pcm=concat(chunks);chunks=[];
+  audioBlob=pcmToWav(pcm);
+  const dur=(pcm.length/32000).toFixed(1);
+  const samples=new Int16Array(pcm.buffer);let max=0;for(let i=0;i<Math.min(1000,samples.length);i++)max=Math.max(max,Math.abs(samples[i]));
+  statusEl.textContent='✅ 完成! '+pcm.length+'B, '+dur+'s, 峰值='+max+(max>1000?' ✅':' ⚠ 偏小');
+  saveRow.classList.remove('hidden');actionsEl.classList.remove('hidden');
+  fill.style.width='0%';
 }
 
-async function startRecording() {
-if (!fixtureNameEl.value.trim() && !expectedTextEl.value.trim()) {
-log('Please enter a file name or expected text');
-return;
-}
+recBtn.onclick=()=>recBtn.classList.contains('recording')?stop():start();
 
-const name = fixtureNameEl.value.trim() || sanitizeFilename(expectedTextEl.value.trim()).slice(0, 30);
-currentFixtureName = name;
+// 回放
+playBtn.onclick=()=>{if(audioBlob){const a=new Audio(URL.createObjectURL(audioBlob));a.play()}};
 
-recordBtn.disabled = true;
-recordBtn.textContent = 'Recording...';
-recordingIndicator.classList.add('active');
-downloadPending.classList.remove('active');
-saveHint.style.display = 'none';
-recordedChunks = [];
-
-try {
-if (!stream) {
-stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-}
-if (!audioCtx) {
-audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-}
-
-const source = audioCtx.createMediaStreamSource(stream);
-const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-
-processor.onaudioprocess = function(e) {
-const input = e.inputBuffer.getChannelData(0);
-const pcm = new Int16Array(input.length);
-for (let i = 0; i < input.length; i++) {
-pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32768)));
-}
-recordedChunks.push(pcm);
+// 测试 Doubao
+testBtn.onclick=async()=>{
+  if(!audioBlob)return;
+  statusEl.textContent='🧪 测试 Doubao...';
+  const raw=await audioBlob.arrayBuffer();
+  const pcmStart=44; // skip WAV header
+  const pcm=raw.slice(pcmStart);
+  try{
+    const r=await fetch('http://127.0.0.1:9877/asr',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:pcm});
+    const j=await r.json();
+    statusEl.textContent=j.text?'✅ Doubao: '+j.text:'❌ 未识别';
+    resultEl.textContent='期望: '+expectedEl.value+' → 实际: '+(j.text||'(无)');
+  }catch(e){statusEl.textContent='❌ 连接失败 (Electron 在跑吗?)'}
 };
 
-source.connect(processor);
-processor.connect(audioCtx.destination);
+// 保存
+saveBtn.onclick=async()=>{
+  if(!audioBlob)return;
+  const name=fnameEl.value||'recording';
+  const raw=await audioBlob.arrayBuffer();
+  const pcm=raw.slice(44);
+  const url='http://127.0.0.1:9877/save-fixture?name='+encodeURIComponent(name)+'&text='+encodeURIComponent(expectedEl.value||'');
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:pcm});
+    const j=await r.json();
+    statusEl.textContent=j.ok?'✅ 已覆盖 '+name+'.pcm ('+j.size+'B)':'❌ '+j.error;
+  }catch(e){statusEl.textContent='❌ 连接失败 (Electron 在跑吗?)'}
+};
 
-const startTime = Date.now();
-recordingTimer = setInterval(() => {
-const elapsed = Date.now() - startTime;
-const remaining = Math.max(0, Math.ceil((RECORD_DURATION_MS - elapsed) / 1000));
-countdownEl.textContent = remaining + 's';
-if (remaining <= 0) {
-stopRecording(source, processor);
-}
-}, 100);
-
-log('Recording ' + RECORD_DURATION_MS / 1000 + 's...');
-} catch (e) {
-log('Error: ' + e.message);
-recordBtn.disabled = false;
-recordBtn.textContent = 'Record (5s)';
-recordingIndicator.classList.remove('active');
-countdownEl.textContent = '';
-}
-}
-
-function stopRecording(source, processor) {
-if (recordingTimer) {
-clearInterval(recordingTimer);
-recordingTimer = null;
-}
-
-try { source.disconnect(); } catch {}
-try { processor.disconnect(); } catch {}
-
-countdownEl.textContent = 'Done';
-recordingIndicator.classList.remove('active');
-recordBtn.disabled = false;
-recordBtn.textContent = 'Record (5s)';
-
-// Merge PCM data
-const totalSamples = recordedChunks.reduce((s, c) => s + c.length, 0);
-const merged = new Int16Array(totalSamples);
-let offset = 0;
-for (const chunk of recordedChunks) {
-merged.set(chunk, offset);
-offset += chunk.length;
-}
-
-// Create PCM blob
-pcmBlob = new Blob([merged.buffer], { type: 'application/octet-stream' });
-
-// Show download option
-downloadPending.classList.add('active');
-const expected = expectedTextEl.value.trim();
-if (!fixtureNameEl.value.trim() && expected) {
-fixtureNameEl.value = sanitizeFilename(expected).slice(0, 30);
-}
-addFixtureToList(currentFixtureName, expected);
-log('Recording complete');
-}
-
-savePcmBtn.addEventListener('click', function() {
-if (!pcmBlob) return;
-const a = document.createElement('a');
-a.href = URL.createObjectURL(pcmBlob);
-a.download = currentFixtureName + '.pcm';
-document.body.appendChild(a);
-a.click();
-document.body.removeChild(a);
-URL.revokeObjectURL(a.href);
-saveHint.style.display = 'block';
-log('Downloaded ' + currentFixtureName + '.pcm');
-});
-
-saveTxtBtn.addEventListener('click', function() {
-const expected = expectedTextEl.value.trim();
-if (!expected) {
-log('No expected text to save');
-return;
-}
-const blob = new Blob([expected], { type: 'text/plain;charset=utf-8' });
-const a = document.createElement('a');
-a.href = URL.createObjectURL(blob);
-a.download = currentFixtureName + '.txt';
-document.body.appendChild(a);
-a.click();
-document.body.removeChild(a);
-URL.revokeObjectURL(a.href);
-saveHint.style.display = 'block';
-log('Downloaded ' + currentFixtureName + '.txt');
-});
-
-recordBtn.addEventListener('click', startRecording);
-
-log('Ready. Type expected text, click Record, speak clearly.');
-</script>
-</body>
-</html>
+// 快捷键: 空格=录音/停止
+document.onkeydown=e=>{if(e.key===' '&&e.target===document.body){e.preventDefault();recBtn.click()}};
+</script></body></html>

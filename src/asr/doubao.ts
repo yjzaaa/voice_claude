@@ -44,34 +44,34 @@ class WsReader {
   }
 
   read(timeout = 10000): Promise<Buffer | null> {
-    // 先尝试从已有 buffer 解析
-    if (this.tryFrame()) return Promise.resolve(null);
+    const frame = this.extractFrame();
+    if (frame !== undefined) return Promise.resolve(frame);
     // 已有 resolve 等待中（不应该发生，但安全处理）
     if (this.resolve) return Promise.reject(new Error('concurrent wsRead'));
     return new Promise((resolve) => {
       this.resolve = resolve;
       this.timer = setTimeout(() => {
         L("WS.TIMEOUT");
-        const r = this.resolve;
         this.resolve = null;
         this.timer = null;
-        if (r) r(null);
+        resolve(null);
       }, timeout);
     });
   }
 
-  /** 尝试从 buffer 提取一个 WS 帧。返回 true = 需要更多数据 */
-  private tryFrame(): boolean {
-    if (this.buf.length < 2) return true;
-    const fin = this.buf[0] & 0x80;  // unused but noted
+  /** 尝试从 buffer 提取一个 WS 帧。
+   * 返回 undefined = 需要更多数据；null = close 帧；Buffer = payload
+   */
+  private extractFrame(): Buffer | null | undefined {
+    if (this.buf.length < 2) return undefined;
     const opcode = this.buf[0] & 0x0F;
     const masked = (this.buf[1] & 0x80) !== 0;
     let len = this.buf[1] & 0x7F;
     let offset = 2;
-    if (len === 126) { if (this.buf.length < 4) return true; len = this.buf.readUInt16BE(2); offset = 4; }
-    else if (len === 127) { if (this.buf.length < 10) return true; len = Number(this.buf.readBigUInt64BE(2)); offset = 10; }
+    if (len === 126) { if (this.buf.length < 4) return undefined; len = this.buf.readUInt16BE(2); offset = 4; }
+    else if (len === 127) { if (this.buf.length < 10) return undefined; len = Number(this.buf.readBigUInt64BE(2)); offset = 10; }
     const maskLen = masked ? 4 : 0;
-    if (this.buf.length < offset + maskLen + len) return true;
+    if (this.buf.length < offset + maskLen + len) return undefined;
     // 提取 payload
     let payload: Buffer;
     if (masked) {
@@ -83,24 +83,27 @@ class WsReader {
       payload = this.buf.subarray(offset, offset + len);
     }
     this.buf = this.buf.subarray(offset + maskLen + len);
-    // 如果是关闭帧，返回 null
+    // 关闭帧
     if (opcode === 0x8) {
-      this.cancel();
-      return false; // 不 resolve，因为 resolve 可能在未来的 read() 调用中
+      return null;
     }
-    // 仅处理 binary (0x2) 和 text (0x1) 帧
+    // 仅处理 binary (0x2) 和 text (0x1) 帧；其余跳过继续解析
     if (opcode !== 0x1 && opcode !== 0x2) {
-      return this.tryFrame(); // skip non-data frames (ping/pong)
+      return this.extractFrame();
     }
-    const resolve = this.resolve;
-    if (resolve) {
-      this.cancel();
-      resolve(payload);
-    }
-    return false;
+    return payload;
   }
 
-  private flush() { if (this.resolve) this.tryFrame(); }
+  private flush() {
+    if (!this.resolve) return;
+    const frame = this.extractFrame();
+    if (frame !== undefined) {
+      const r = this.resolve;
+      this.resolve = null;
+      if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+      r(frame);
+    }
+  }
 }
 
 function hdr(msgType: number, flags = 0, serial = 0, compress = 0): Buffer {
@@ -145,18 +148,13 @@ function parseResp(raw: Buffer): { msgType: number; seq: number; json?: any; raw
   // A) v3 标准: [4B hdr][4B seq][4B payloadSize][payload]
   if (raw.length >= 12) {
     const sz = raw.readUInt32BE(8);
-    if (sz > 0 && sz <= raw.length - 12 && sz < 0x100000) tries.push({ seq: raw.readUInt32BE(4), p: raw.subarray(12, 12 + sz) });
+    if (sz > 0 && sz <= raw.length - 12 && sz < 0x100000) candidates.push({ seq: raw.readUInt32BE(4), payload: raw.subarray(12, 12 + sz) });
   }
 
   // B) v2 风格无 seq: [4B hdr][4B payloadSize][payload]
   if (raw.length >= 8) {
     const sz = raw.readUInt32BE(4);
-    if (sz > 0 && sz <= raw.length - 8 && sz < 0x100000) tries.push({ seq: 0, p: raw.subarray(8, 8 + sz) });
-  }
-  if (raw.length > 4) tries.push({ seq: 0, p: raw.subarray(4) });
-
-  for (const t of tries) {
-    try { return { msgType, seq: t.seq, json: JSON.parse(t.p.toString("utf-8")) }; } catch {}
+    if (sz > 0 && sz <= raw.length - 8 && sz < 0x100000) candidates.push({ seq: 0, payload: raw.subarray(8, 8 + sz) });
   }
 
   // C) payload 紧跟在 4B header 后
@@ -176,6 +174,8 @@ function parseResp(raw: Buffer): { msgType: number; seq: number; json?: any; raw
   if (raw.length > 2) {
     try { return { msgType: 0, seq: 0, json: JSON.parse(raw.toString("utf-8")) }; } catch {}
   }
+
+  return { msgType, seq: 0, raw: raw.subarray(4) };
 
   return { msgType, seq: 0, raw: raw.subarray(4) };
 }
@@ -208,13 +208,13 @@ export async function transcribe(audio: Buffer, sampleRate = 16000): Promise<str
 
     L("3.WS");
     const ws = new WsReader();
-    ws.attach(tlsSock);
     const reqId = crypto.randomUUID();
     const key = crypto.randomBytes(16).toString("base64");
     tlsSock.write("GET " + PATH + " HTTP/1.1\r\nHost: " + HOST + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\nX-Api-App-Key: " + APP_ID + "\r\nX-Api-Access-Key: " + ACCESS_TOKEN + "\r\nX-Api-Resource-Id: " + RESOURCE_ID + "\r\nX-Api-Request-Id: " + reqId + "\r\nX-Api-Sequence: -1\r\n\r\n");
-    const upgResp = await ws.read(5000);
-    if (!upgResp || !upgResp.toString().includes("101")) { L("3.FAIL " + (upgResp ? upgResp.toString().slice(0,100) : "timeout")); ws.detach(tlsSock); tlsSock.end(); return null; }
+    const upgResp = await readHttpResponse(tlsSock, 5000);
+    if (!upgResp || !upgResp.includes("101")) { L("3.FAIL " + (upgResp ? upgResp.slice(0,100) : "timeout")); tlsSock.end(); return null; }
     L("3.OK");
+    ws.attach(tlsSock);
 
     L("4.REQ");
     const req = JSON.stringify({
@@ -260,14 +260,23 @@ export async function transcribe(audio: Buffer, sampleRate = 16000): Promise<str
           L(`ERR: ${r.json.message || r.json.code}`);
           break;
         }
+        // 取最新累积文本（流式结果中 result.text 是累计的）
         if (r.json.result) {
-          const parts: string[] = r.json.result.map((x: any) => x.text || '');
-          const joined = parts.join('');
-          if (joined) { text += joined; hasResult = true; }
+          if (Array.isArray(r.json.result)) {
+            const parts: string[] = r.json.result.map((x: any) => x.text || '');
+            const joined = parts.join('');
+            if (joined) { text = joined; }
+          } else if (r.json.result.text !== undefined) {
+            text = r.json.result.text;
+          }
         }
-        if (r.json.text) { text += r.json.text; hasResult = true; }
-        if (r.json.utterance) { text += r.json.utterance; hasResult = true; }
-        if (r.json.is_final || r.msgType === 4) { L('RESP is_final'); break; }
+        if (r.json.text) { text = r.json.text; }
+
+        // 判断是否为最终结果：is_final / definite / utterances 中 definite
+        const isFinal = r.json.is_final === true ||
+                        r.json.result?.definite === true ||
+                        (r.json.utterances && r.json.utterances.some((u: any) => u.definite === true));
+        if (isFinal) { L('RESP is_final'); break; }
       } else {
         L(`RESP raw ${r.raw?.length}B: ${r.raw?.slice(0, 40).toString('hex')}`);
       }

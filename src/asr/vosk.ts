@@ -71,7 +71,7 @@ export function start(onResult: (text: string) => void): { stop: () => void } {
   ipcMain.on('voice:text', handler);
 
   // Create hidden window loading vosk.html
-  const htmlPath = path.join(__dirname, 'vosk.html');
+  const htmlPath = path.join(__dirname, '..', '..', 'html', 'vosk.html');
   voskWin = new BrowserWindow({
     width: 1,
     height: 1,

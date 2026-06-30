@@ -72,9 +72,26 @@ describe('ASR TDD', () => {
   // Chrome Web Speech tests (via HTTP)
   // ============================================
   describe('Chrome Web Speech', () => {
+    // 同步探测 127.0.0.1:9877 是否可连；不可连则全部 skip
     const hasServer = (() => {
-      try { const r = (http as any).request('http://127.0.0.1:9877/status', { method: 'GET', timeout: 1000 }); r.end(); return true; }
-      catch { return false; }
+      try {
+        const net = require('net');
+        const s = net.connect(9877, '127.0.0.1');
+        s.setTimeout(500);
+        let ok = false;
+        s.on('connect', () => { ok = true; s.end(); });
+        s.on('error', () => {});
+        // 阻塞一小会儿等结果（仅测试启动时执行一次）
+        const start = Date.now();
+        while (Date.now() - start < 600) {
+          if (ok) break;
+          require('child_process').execSync('sleep 0.01');
+        }
+        s.destroy();
+        return ok;
+      } catch {
+        return false;
+      }
     })();
 
     for (const spec of specs.slice(0, 3)) {  // 只测有文字的

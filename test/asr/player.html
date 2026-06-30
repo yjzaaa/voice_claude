@@ -1,0 +1,52 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>🔊 PCM 播放器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:20px;max-width:600px;margin:0 auto}
+h2{margin-bottom:16px}
+.file{margin:8px 0;padding:12px;background:#0f3460;border-radius:4px;display:flex;align-items:center;gap:12px}
+.file span{flex:1;font-size:.9em}
+.stats{font-size:.7em;color:#888}
+.stats .good{color:#00e676}.stats .bad{color:#e94560}
+button{background:#e94560;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer}
+button.playing{background:#00e676;color:#000}
+</style></head><body>
+<h2>🔊 PCM 音频验证</h2>
+<div id="list"></div>
+<script>
+const FILES=['fixtures/hello.pcm','fixtures/debug.pcm','fixtures/switch.pcm','fixtures/silence.pcm'];
+function pcmToWav(pcm,sr=16000){
+  const len=pcm.byteLength;
+  const buf=new ArrayBuffer(44+len);
+  const v=new DataView(buf);
+  const w=s=>{for(let i=0;i<s.length;i++)v.setUint8(44+i,s.charCodeAt(i))};
+  w('RIFF');v.setUint32(4,36+len,true);w('WAVE');
+  w('fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+  w('data');v.setUint32(40,len,true);
+  new Uint8Array(buf,44).set(new Uint8Array(pcm));
+  return new Blob([buf],{type:'audio/wav'});
+}
+async function load(){
+  const list=document.getElementById('list');
+  for(const f of FILES){
+    try{
+      const r=await fetch(f);
+      if(!r.ok){list.innerHTML+=`<div class="file"><span>${f} — 不存在</span></div>`;continue}
+      const buf=await r.arrayBuffer();
+      const samples=new Int16Array(buf,0,Math.min(2000,Math.floor(buf.byteLength/2)));
+      let max=0,sum=0,nz=0;
+      for(let i=0;i<samples.length;i++){const v=Math.abs(samples[i]);max=Math.max(max,v);sum+=v;if(v>50)nz++}
+      const rms=Math.sqrt(sum/samples.length);const active=(nz/samples.length*100).toFixed(0);
+      const good=active>5;
+      const div=document.createElement('div');div.className='file';
+      div.innerHTML=`<span>${f}<br><span class="stats ${good?'good':'bad'}">${(buf.byteLength/1024).toFixed(1)}KB 峰值=${max} RMS=${rms.toFixed(0)} 活跃=${active}% ${good?'✅':'❌'}</span></span>`;
+      const btn=document.createElement('button');btn.textContent='▶ 播放';
+      const wav=pcmToWav(buf);
+      const url=URL.createObjectURL(wav);const audio=new Audio(url);
+      btn.onclick=()=>{if(audio.paused){audio.play();btn.textContent='⏸ 停止';btn.classList.add('playing')}else{audio.pause();audio.currentTime=0;btn.textContent='▶ 播放';btn.classList.remove('playing')}};
+      audio.onended=()=>{btn.textContent='▶ 播放';btn.classList.remove('playing')};
+      div.appendChild(btn);list.appendChild(div);
+    }catch(e){list.innerHTML+=`<div class="file"><span>${f} — 加载失败</span></div>`}
+  }
+}
+load();
+</script></body></html>
