@@ -13,7 +13,10 @@ logs/
 asr_test.log
 
 # Runtime data
+.voice_claude/
 .voice_claude.memory.json
+models/
+test-results/
 
 # Coverage
 coverage/

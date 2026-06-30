@@ -62,6 +62,8 @@ async function main(): Promise<void> {
 
   // 状态窗口
   function createStatusWindow(): BrowserWindow {
+    const preloadPath = path.join(__dirname, 'preload.js');
+    logger.info('status', 'preload path', { preloadPath });
     const w = new BrowserWindow({
       width: 320,
       height: 220,
@@ -73,10 +75,13 @@ async function main(): Promise<void> {
       alwaysOnTop: true,
       skipTaskbar: true,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
+        preload: preloadPath,
         nodeIntegration: false,
         contextIsolation: true,
       },
+    });
+    w.webContents.on('preload-error', (_event, preloadPath_, error) => {
+      logger.error('status', 'preload error', { preloadPath: preloadPath_, error: error.message });
     });
 
     const url = statusUrl();
