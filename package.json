@@ -4,13 +4,16 @@
   "description": "语音 → Claude Code · Electron + TypeScript",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc",
-    "start": "tsc && electron .",
+    "build": "tsc && npm run build:renderer",
+    "build:renderer": "vite build",
+    "start": "npm run build && electron .",
+    "dev": "tsc && vite build --mode development && electron .",
+    "dev:renderer": "vite",
     "test:asr": "ts-node test/asr/run.ts",
-    "test:asr:jest": "jest --testPathPattern='test/asr/test_spec' --testTimeout=30000",
-    "test:unit": "jest --testPathPattern='test/unit' --testTimeout=30000",
-    "test:all": "jest --testPathPattern='test/' --testTimeout=30000",
-    "test": "jest --testPathPattern='test/unit' --testTimeout=30000"
+    "test:asr:jest": "jest --testPathPatterns='test/asr/test_spec' --testTimeout=30000",
+    "test:unit": "jest --testPathPatterns='test/unit' --testTimeout=30000",
+    "test:all": "jest --testPathPatterns='test/' --testTimeout=30000",
+    "test": "jest --testPathPatterns='test/unit' --testTimeout=30000"
   },
   "dependencies": {
     "electron": "^34.5.8",
@@ -18,11 +21,21 @@
     "vosk-browser": "^0.0.8"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
     "electron-reload": "^2.0.0-alpha.1",
     "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vite": "^8.1.1"
   }
 }
