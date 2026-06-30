@@ -13,6 +13,6 @@ describe('StatusIcon', () => {
 
   test('adds recording class when recording', () => {
     const { container } = render(<StatusIcon recording />);
-    expect(container.firstChild).toHaveStyle('color: rgb(233, 69, 96)');
+    expect((container.firstChild as HTMLElement).className).toContain('recording');
   });
 });

@@ -1,4 +1,5 @@
 import React from 'react';
+import styles from './StatusButton.module.css';
 
 export interface StatusButtonProps {
   recording: boolean;
@@ -8,20 +9,14 @@ export interface StatusButtonProps {
 export const StatusButton: React.FC<StatusButtonProps> = ({ recording, onClick }) => {
   return (
     <button
+      type="button"
       onClick={onClick}
-      style={{
-        marginTop: 10,
-        padding: '8px 20px',
-        border: 'none',
-        borderRadius: 8,
-        background: recording ? '#e94560' : '#00e676',
-        color: recording ? '#fff' : '#000',
-        fontSize: '0.95em',
-        cursor: 'pointer',
-        outline: 'none',
-      }}
+      className={[styles.button, recording ? styles.recording : ''].join(' ')}
+      data-testid="status-button"
     >
       {recording ? '停止录音' : '开始录音'}
     </button>
   );
 };
+
+export default StatusButton;

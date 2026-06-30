@@ -1,0 +1,58 @@
+.panel {
+  font-size: 0.7em;
+  color: #888;
+  margin-top: 10px;
+  width: 260px;
+  max-width: 90%;
+  min-height: 3.6em;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.row:last-child {
+  margin-bottom: 0;
+}
+
+.label {
+  color: #6c6c7c;
+  flex-shrink: 0;
+}
+
+.value {
+  color: #b0b0c0;
+  text-align: right;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.hint {
+  text-align: center;
+  color: #888;
+}
+
+.riskLow {
+  color: #00e676;
+}
+
+.riskMedium {
+  color: #ffca28;
+}
+
+.riskHigh {
+  color: #ff7043;
+}
+
+.riskCritical {
+  color: #e94560;
+}

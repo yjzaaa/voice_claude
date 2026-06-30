@@ -1,0 +1,26 @@
+.button {
+  margin-top: 10px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #00e676;
+  color: #000;
+  font-size: 0.95em;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.12s ease, filter 0.12s ease, background 0.2s ease;
+}
+
+.button:hover {
+  filter: brightness(1.1);
+}
+
+.button:active {
+  transform: scale(0.97);
+}
+
+.recording {
+  background: #e94560;
+  color: #fff;
+}

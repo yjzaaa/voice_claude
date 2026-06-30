@@ -1,4 +1,5 @@
 import React from 'react';
+import styles from './StatusIcon.module.css';
 
 export interface StatusIconProps {
   recording: boolean;
@@ -7,15 +8,14 @@ export interface StatusIconProps {
 export const StatusIcon: React.FC<StatusIconProps> = ({ recording }) => {
   return (
     <div
-      style={{
-        fontSize: '2.5em',
-        marginBottom: 6,
-        marginTop: 14,
-        transition: 'transform 0.2s',
-        color: recording ? '#e94560' : '#e0e0e0',
-      }}
+      className={[styles.icon, recording ? styles.recording : ''].join(' ')}
+      data-testid="status-icon"
+      aria-label={recording ? '录音中' : '就绪'}
+      role="img"
     >
       🎤
     </div>
   );
 };
+
+export default StatusIcon;

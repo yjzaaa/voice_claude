@@ -1,0 +1,94 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 16px;
+  z-index: 10;
+  padding: 12px;
+}
+
+.card {
+  background: rgba(30, 30, 50, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  max-width: 280px;
+  color: #e0e0e0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.title {
+  margin: 0 0 12px;
+  font-size: 1em;
+  font-weight: 600;
+  color: #ffca28;
+  text-align: center;
+}
+
+.section {
+  margin: 0 0 10px;
+  font-size: 0.8em;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.label {
+  color: #888;
+  margin-right: 4px;
+}
+
+.toolList {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.toolItem {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.9em;
+  color: #ffca28;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.button {
+  flex: 1;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  color: #fff;
+}
+
+.button:hover {
+  opacity: 0.85;
+}
+
+.deny {
+  background: #e94560;
+}
+
+.allowOnce {
+  background: #3a3a52;
+}
+
+.allowAlways {
+  background: #00e676;
+  color: #121224;
+}

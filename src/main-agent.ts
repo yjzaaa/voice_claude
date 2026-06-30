@@ -5,11 +5,16 @@
  * 录音仍由隐藏窗口的 Web Audio + VAD 处理，每段语音结束后交给 agent 规划/执行。
  */
 
-import { app, BrowserWindow, Tray, screen, nativeImage, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, Tray, screen, nativeImage, ipcMain } from 'electron';
 import * as path from 'path';
 import { createApp } from './composition-root';
 import { initRecorder, startRecording, stopRecording, isRecorderRecording } from './asr/recorder';
 import { installGlobalExceptionHandlers } from './infrastructure/errors/GlobalExceptionHandler';
+import {
+  PermissionRequestPayload,
+  PermissionResponsePayload,
+  PERMISSION_CHANNELS,
+} from './infrastructure/ipc/PermissionIpc';
 
 const isDev = !app.isPackaged;
 
@@ -127,30 +132,55 @@ async function main(): Promise<void> {
     logger.info('app', 'ready');
     win = createStatusWindow();
 
-    // 高风险工具权限请求：弹出系统对话框让用户选择拒绝 / 允许一次 / 始终允许
+    // 高风险工具权限请求：转发给 renderer 并等待用户决策
     eventBus.on('agent:permission-request', async (payload: any) => {
-      const { text, plan, tools } = payload as {
-        text: string;
-        plan: { goal: string; steps: any[] };
-        tools: string[];
-      };
-      logger.warn('permission', 'requesting user consent', { tools, goal: plan.goal });
+      const { text, plan, tools } = payload as PermissionRequestPayload;
+      logger.warn('permission', 'requesting user consent via renderer', { tools, goal: plan.goal });
 
-      const { response } = await dialog.showMessageBox(win!, {
-        type: 'question',
-        buttons: ['拒绝', '允许一次', '始终允许'],
-        defaultId: 0,
-        title: 'voice_claude 请求权限',
-        message: `请求执行高风险操作：${tools.join('、')}`,
-        detail: `目标：${plan.goal}\n语音：${text}`,
+      if (!win || win.isDestroyed()) {
+        logger.error('permission', 'no status window available to show permission UI');
+        return;
+      }
+
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const request: PermissionRequestPayload & { requestId: string } = {
+        requestId,
+        text,
+        plan,
+        tools,
+      };
+
+      const response = await new Promise<PermissionResponsePayload | null>((resolve) => {
+        const timer = setTimeout(() => {
+          ipcMain.removeListener(PERMISSION_CHANNELS.RESPONSE, handler);
+          resolve(null);
+        }, 60000);
+
+        const handler = (
+          _event: Electron.IpcMainEvent,
+          reply: PermissionResponsePayload & { requestId: string },
+        ) => {
+          if (reply.requestId !== requestId) return;
+          clearTimeout(timer);
+          ipcMain.removeListener(PERMISSION_CHANNELS.RESPONSE, handler);
+          resolve({ tools: reply.tools, decision: reply.decision });
+        };
+
+        ipcMain.on(PERMISSION_CHANNELS.RESPONSE, handler);
+        win!.webContents.send(PERMISSION_CHANNELS.REQUEST, request);
       });
 
-      if (response === 0) {
+      if (!response) {
+        logger.warn('permission', 'renderer did not respond in time', { tools });
+        return;
+      }
+
+      if (response.decision === 'deny') {
         logger.warn('permission', 'denied', { tools });
         return;
       }
 
-      const allowAlways = response === 2;
+      const allowAlways = response.decision === 'allow-always';
       let whitelist: string[] = [];
       if (allowAlways) {
         const current = (await memoryStore.get<string[]>('riskWhitelist')) ?? [];
@@ -211,6 +241,30 @@ async function main(): Promise<void> {
       if (level === 'error') logger.error(cmp, msg, extra);
       else if (level === 'warn') logger.warn(cmp, msg, extra);
       else logger.info(cmp, msg, extra);
+    });
+
+    // 设置页：读写持久化记忆存储
+    ipcMain.handle('settings:getPreferences', async () => {
+      return (await memoryStore.get<Record<string, unknown>>('preferences')) ?? {};
+    });
+    ipcMain.handle('settings:setPreferences', async (_event, prefs: Record<string, unknown>) => {
+      await memoryStore.set('preferences', prefs);
+    });
+    ipcMain.handle('settings:getRiskWhitelist', async () => {
+      return (await memoryStore.get<string[]>('riskWhitelist')) ?? [];
+    });
+    ipcMain.handle('settings:addRiskWhitelist', async (_event, tool: string) => {
+      const current = (await memoryStore.get<string[]>('riskWhitelist')) ?? [];
+      const next = Array.from(new Set([...current, tool]));
+      await memoryStore.set('riskWhitelist', next);
+    });
+    ipcMain.handle('settings:removeRiskWhitelist', async (_event, tool: string) => {
+      const current = (await memoryStore.get<string[]>('riskWhitelist')) ?? [];
+      const next = current.filter((t) => t !== tool);
+      await memoryStore.set('riskWhitelist', next);
+    });
+    ipcMain.handle('settings:getRecentActions', async () => {
+      return (await memoryStore.get<string[]>('recentActions')) ?? [];
     });
 
     // 初始化录音器：VAD 自动分段，每段交给 agent
