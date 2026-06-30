@@ -1,9 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import {
+import type {
   PermissionRequestPayload,
   PermissionDecision,
-  PERMISSION_CHANNELS,
 } from './infrastructure/ipc/PermissionIpc';
+
+/** 权限请求/响应通道名（在 preload 中内联，避免沙箱内相对路径 require 失败）。 */
+const PERMISSION_CHANNELS = {
+  REQUEST: 'agent:permission-request',
+  RESPONSE: 'agent:permission-response',
+} as const;
 
 contextBridge.exposeInMainWorld('voiceAPI', {
   send: (text: string) => ipcRenderer.send('voice:text', text),

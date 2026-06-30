@@ -1,5 +1,7 @@
 import { test, expect, _electron as electron } from '@playwright/test';
 import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const ELECTRON_EXECUTABLE = path.join(PROJECT_ROOT, 'node_modules', '.bin', 'electron.cmd');
@@ -9,11 +11,13 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('voice_claude Electron smoke', () => {
   let electronApp: Awaited<ReturnType<typeof electron.launch>>;
+  let userDataDir: string;
 
   test.beforeAll(async () => {
+    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-claude-smoke-'));
     electronApp = await electron.launch({
       executablePath: ELECTRON_EXECUTABLE,
-      args: [MAIN_ENTRY],
+      args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`],
       cwd: PROJECT_ROOT,
       env: {
         ...process.env,
@@ -24,11 +28,14 @@ test.describe('voice_claude Electron smoke', () => {
 
   test.afterAll(async () => {
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test('status window loads without white screen', async () => {
     const window = await electronApp.firstWindow();
     await window.waitForLoadState('networkidle');
+    await window.setViewportSize({ width: 320, height: 220 });
+    await window.bringToFront();
 
     const screenshotPath = path.join(PROJECT_ROOT, 'logs', 'smoke-status.png');
     await window.screenshot({ path: screenshotPath });
@@ -40,9 +47,11 @@ test.describe('voice_claude Electron smoke', () => {
 
   test('gear button opens settings page', async () => {
     const window = await electronApp.firstWindow();
+    await window.setViewportSize({ width: 320, height: 220 });
+    await window.bringToFront();
     await window.getByLabel('设置').click();
 
-    await expect(window.getByText('设置')).toBeVisible();
+    await expect(window.getByRole('heading', { name: '设置', exact: true })).toBeVisible();
     await expect(window.getByText('偏好设置')).toBeVisible();
     await expect(window.getByText('高风险工具白名单')).toBeVisible();
 
@@ -59,22 +68,21 @@ test.describe('voice_claude Electron smoke', () => {
   });
 
   test('no uncaught exceptions or console errors', async () => {
+    const window = await electronApp.firstWindow();
     const errors: string[] = [];
+    const pageErrors: Error[] = [];
+
+    window.on('pageerror', (err) => pageErrors.push(err));
     electronApp.on('console', (msg) => {
       if (msg.type() === 'error') {
         errors.push(msg.text());
       }
     });
 
-    const window = await electronApp.firstWindow();
-    const [exception] = await Promise.all([
-      new Promise<Error | null>((resolve) =>
-        electronApp.once('window', (w) => w.on('pageerror', resolve)),
-      ),
-      window.reload(),
-    ]);
+    await window.reload();
+    await window.waitForLoadState('networkidle');
 
-    expect(exception).toBeNull();
+    expect(pageErrors).toHaveLength(0);
     expect(errors.filter((e) => !e.includes('source map'))).toHaveLength(0);
   });
 });

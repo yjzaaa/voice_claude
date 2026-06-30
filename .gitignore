@@ -39,3 +39,4 @@ Thumbs.db
 # Local agent state
 .claude/
 .autoclaw/
+.tmp/
