@@ -71,3 +71,12 @@ HTTP GET /status
 HTTP POST /asr
 HTTP POST /asr
 HTTP POST /asr
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP POST /send
+HTTP OPTIONS /asr
+HTTP OPTIONS /asr
+HTTP OPTIONS /asr
