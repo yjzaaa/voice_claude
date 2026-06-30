@@ -1,8 +1,37 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
 dist/
-*.py
-*.pyc
-__pycache__/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+asr_test.log
+
+# Runtime data
+.voice_claude.memory.json
+
+# Coverage
+coverage/
+
+# Local dev / secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local agent state
 .claude/
 .autoclaw/
-electron/

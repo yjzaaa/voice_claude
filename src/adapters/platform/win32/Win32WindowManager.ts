@@ -5,7 +5,11 @@ export interface Win32WindowManagerDeps {
   pythonExecutable: string;
   scriptRoot: string;
   execSync: (command: string, options?: any) => Buffer | string;
-  spawn: (command: string, args: string[], options?: any) => {
+  spawn: (
+    command: string,
+    args: string[],
+    options?: any,
+  ) => {
     stdout?: { on(event: 'data', cb: (data: Buffer) => void): void };
     stderr?: { on(event: 'data', cb: (data: Buffer) => void): void };
     kill(): void;
@@ -18,13 +22,17 @@ export class Win32WindowManager implements WindowManager {
   findWindows(): WindowInfo[] {
     try {
       const script = path.join(this.deps.scriptRoot, 'find_win.py');
-      const r = this.deps.execSync(`"${this.deps.pythonExecutable}" "${script}"`, {
-        timeout: 3000,
-        encoding: 'utf-8',
-        cwd: this.deps.scriptRoot,
-      }).toString().trim();
+      const r = this.deps
+        .execSync(`"${this.deps.pythonExecutable}" "${script}"`, {
+          timeout: 3000,
+          encoding: 'utf-8',
+          cwd: this.deps.scriptRoot,
+        })
+        .toString()
+        .trim();
       if (!r) return [];
-      return r.split('\n')
+      return r
+        .split('\n')
         .map((line) => {
           const [idStr, ...titleParts] = line.split('|');
           const id = parseInt(idStr, 10);
@@ -62,10 +70,13 @@ export class Win32WindowManager implements WindowManager {
 
   getActiveWindow(): number | null {
     try {
-      const r = this.deps.execSync(
-        `"${this.deps.pythonExecutable}" -c "import ctypes;h=ctypes.windll.user32.GetForegroundWindow();print(h)"`,
-        { timeout: 1000, encoding: 'utf-8' },
-      ).toString().trim();
+      const r = this.deps
+        .execSync(
+          `"${this.deps.pythonExecutable}" -c "import ctypes;h=ctypes.windll.user32.GetForegroundWindow();print(h)"`,
+          { timeout: 1000, encoding: 'utf-8' },
+        )
+        .toString()
+        .trim();
       const id = parseInt(r, 10);
       return Number.isFinite(id) ? id : null;
     } catch {
@@ -107,7 +118,11 @@ export class Win32WindowManager implements WindowManager {
       stop: () => {
         if (killed) return;
         killed = true;
-        try { p.kill(); } catch { /* already dead */ }
+        try {
+          p.kill();
+        } catch {
+          /* already dead */
+        }
       },
     };
   }

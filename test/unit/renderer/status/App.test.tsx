@@ -17,7 +17,7 @@ describe('App', () => {
     useRecordingStateSpy.mockReturnValue({ recording: false, error: null, toggle: jest.fn() });
     render(<App />);
     expect(screen.getByText('voice_claude')).toBeInTheDocument();
-    expect(screen.getByText('就绪')).toBeInTheDocument();
+    expect(screen.getAllByText('就绪').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('button')).toHaveTextContent('开始录音');
   });
 
@@ -37,7 +37,11 @@ describe('App', () => {
   });
 
   test('shows error message', () => {
-    useRecordingStateSpy.mockReturnValue({ recording: false, error: 'IPC 未连接', toggle: jest.fn() });
+    useRecordingStateSpy.mockReturnValue({
+      recording: false,
+      error: 'IPC 未连接',
+      toggle: jest.fn(),
+    });
     render(<App />);
     expect(screen.getByText('❌ IPC 未连接')).toBeInTheDocument();
   });

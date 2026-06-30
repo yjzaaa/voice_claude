@@ -62,7 +62,10 @@ test('T1.6: Each line is valid JSON', () => {
 test('T1.7: Metrics count correctly', () => {
   // Metrics start at zero
   expect(logger.metricsJSON()).toEqual({
-    delivered: 0, errors: 0, avgLatencyMs: 0, count: 0,
+    delivered: 0,
+    errors: 0,
+    avgLatencyMs: 0,
+    count: 0,
   });
 
   logger.delivery('terminal', 'test text', 50);

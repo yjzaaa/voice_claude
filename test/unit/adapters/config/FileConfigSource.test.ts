@@ -16,13 +16,21 @@ describe('FileConfigSource', () => {
 
   test('reads valid config file', () => {
     const file = path.join(configDir, 'config.json');
-    fs.writeFileSync(file, JSON.stringify({
-      asr: { backend: 'vosk', language: 'en-US', sampleRate: 16000 },
-      llm: { apiKey: 'file-key', apiUrl: 'https://file.example.com', model: 'file-model', timeoutMs: 3000 },
-      routing: { strategy: 'active', defaultTarget: 'terminal-1' },
-      doubao: { appId: 'file-app', accessToken: 'file-token', resourceId: 'file-res' },
-      windowManager: { scanIntervalMs: 10000 },
-    }));
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        asr: { backend: 'vosk', language: 'en-US', sampleRate: 16000 },
+        llm: {
+          apiKey: 'file-key',
+          apiUrl: 'https://file.example.com',
+          model: 'file-model',
+          timeoutMs: 3000,
+        },
+        routing: { strategy: 'active', defaultTarget: 'terminal-1' },
+        doubao: { appId: 'file-app', accessToken: 'file-token', resourceId: 'file-res' },
+        windowManager: { scanIntervalMs: 10000 },
+      }),
+    );
 
     const config = new FileConfigSource(file).load();
     expect(config.asr.backend).toBe('vosk');
@@ -47,17 +55,38 @@ describe('FileConfigSource', () => {
     expect(config.asr.sampleRate).toBe(16000);
   });
 
-  test('partial file config is merged with defaults', () => {
-    const file = path.join(configDir, 'partial.json');
-    fs.writeFileSync(file, JSON.stringify({
-      llm: { apiKey: 'partial-key' },
-      doubao: { appId: 'partial-app' },
-    }));
+  test('maps legacy asr.doubao_* fields to doubao.*', () => {
+    const file = path.join(configDir, 'legacy.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        asr: {
+          backend: 'google_stt',
+          doubao_app_id: 'legacy-app',
+          doubao_access_token: 'legacy-token',
+          doubao_resource_id: 'legacy-res',
+        },
+      }),
+    );
 
     const config = new FileConfigSource(file).load();
-    expect(config.llm.apiKey).toBe('partial-key');
-    expect(config.llm.model).toBe('deepseek-chat');
-    expect(config.doubao.appId).toBe('partial-app');
-    expect(config.doubao.accessToken).toBe('');
+    expect(config.doubao.appId).toBe('legacy-app');
+    expect(config.doubao.accessToken).toBe('legacy-token');
+    expect(config.doubao.resourceId).toBe('legacy-res');
+  });
+
+  test('maps legacy snake_case llm fields to camelCase', () => {
+    const file = path.join(configDir, 'legacy-llm.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        llm: { api_key: 'legacy-key', api_url: 'https://legacy.example.com', timeout_ms: 7000 },
+      }),
+    );
+
+    const config = new FileConfigSource(file).load();
+    expect(config.llm.apiKey).toBe('legacy-key');
+    expect(config.llm.apiUrl).toBe('https://legacy.example.com');
+    expect(config.llm.timeoutMs).toBe(7000);
   });
 });

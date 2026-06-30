@@ -15,7 +15,6 @@ jest.mock('os');
 
 import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedOs = os as jest.Mocked<typeof os>;
@@ -25,7 +24,7 @@ const testDefaults: Config = {
   pipeline: { enhance: true, cooldownSec: 3 },
   routing: { strategy: 'llm', defaultTarget: 'chat' },
   llm: {
-    apiKey: 'sk-938dfb4cb1e741ed960e2882da9d2eea',
+    apiKey: '',
     apiUrl: 'https://api.deepseek.com/v1/chat/completions',
     model: 'deepseek-chat',
   },
@@ -54,7 +53,9 @@ function isValidConfig(c: Config): boolean {
 // ── T1.1: Defaults ──────────────────────────────────────────────
 test('T1.1: defaults() returns valid object with all fields', () => {
   // Simulate file read error (file not found → catch → return defaults)
-  mockedFs.readFileSync.mockImplementation(() => { throw new Error('ENOENT'); });
+  mockedFs.readFileSync.mockImplementation(() => {
+    throw new Error('ENOENT');
+  });
 
   const cfg = loadConfig();
   expect(isValidConfig(cfg)).toBe(true);
@@ -87,7 +88,9 @@ test('T1.2: Save → Load roundtrip', () => {
 
 // ── T1.3: Load nonexistent file → defaults ──────────────────────
 test('T1.3: Load nonexistent file → returns defaults', () => {
-  mockedFs.readFileSync.mockImplementation(() => { throw new Error('ENOENT'); });
+  mockedFs.readFileSync.mockImplementation(() => {
+    throw new Error('ENOENT');
+  });
 
   const cfg = loadConfig();
   expect(cfg).toEqual(testDefaults);

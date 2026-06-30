@@ -32,6 +32,22 @@ describe('EventBus', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  test('routes subscriber errors to injected error handler', () => {
+    const onError = jest.fn();
+    bus = new EventBus({ onError });
+    const boom = new Error('subscriber boom');
+
+    bus.on('test:event', () => {
+      throw boom;
+    });
+    bus.emit('test:event', { value: 42 });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [event, err] = onError.mock.calls[0];
+    expect(event).toBe('test:event');
+    expect(err).toBe(boom);
+  });
+
   test('does not throw when emitting event with no subscribers', () => {
     expect(() => bus.emit('unknown:event', 'payload')).not.toThrow();
   });

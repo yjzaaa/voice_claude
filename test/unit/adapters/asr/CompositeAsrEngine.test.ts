@@ -1,11 +1,16 @@
 import { CompositeAsrEngine } from '../../../../src/adapters/asr/CompositeAsrEngine';
 import { AsrEngine } from '../../../../src/ports/incoming/AsrEngine';
 
-function makeEngine(name: string, available: boolean, result: string | null, callLog: string[]): AsrEngine {
+function makeEngine(
+  name: string,
+  available: boolean,
+  result: string | null,
+  callLog: string[],
+): AsrEngine {
   return {
     name,
     isAvailable: () => available,
-    transcribe: async (audio: Buffer) => {
+    transcribe: async (_audio: Buffer) => {
       callLog.push(name);
       return result;
     },

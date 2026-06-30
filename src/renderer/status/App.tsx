@@ -2,6 +2,7 @@ import React from 'react';
 import { StatusIcon } from './components/StatusIcon';
 import { StatusButton } from './components/StatusButton';
 import { DebugPanel } from './components/DebugPanel';
+import { AgentStatus } from './components/AgentStatus';
 import { useRecordingState } from './hooks/useRecordingState';
 
 export const App: React.FC = () => {
@@ -31,7 +32,7 @@ export const App: React.FC = () => {
           left: 0,
           right: 0,
           height: 28,
-          ...( { WebkitAppRegion: 'drag' } as any),
+          ...({ WebkitAppRegion: 'drag' } as any),
         }}
       />
       <StatusIcon recording={recording} />
@@ -41,6 +42,7 @@ export const App: React.FC = () => {
       </p>
       <StatusButton recording={recording} onClick={toggle} />
       <DebugPanel recording={recording} />
+      <AgentStatus />
     </div>
   );
 };

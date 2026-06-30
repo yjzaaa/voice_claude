@@ -4,12 +4,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-type Level = 'debug'|'info'|'warn'|'error';
+type Level = 'debug' | 'info' | 'warn' | 'error';
 
 interface Entry {
   ts: string;
   lvl: Level;
-  cmp: string;   // 组件名: router, delivery, http, registry, asr
+  cmp: string; // 组件名: router, delivery, http, registry, asr
   msg: string;
   [key: string]: any;
 }
@@ -20,31 +20,47 @@ class Logger {
 
   constructor(dirpath?: string) {
     this.dir = dirpath || path.join(__dirname, '..', 'logs');
-    try { fs.mkdirSync(this.dir, { recursive: true }); } catch {}
+    try {
+      fs.mkdirSync(this.dir, { recursive: true });
+    } catch {
+      /* best-effort: dir may already exist */
+    }
   }
 
   private fileFor(cmp: string): string {
     return path.join(this.dir, `${cmp}.log`);
   }
 
-  log(lvl: Level, cmp: string, msg: string, extra: Record<string,any> = {}) {
+  log(lvl: Level, cmp: string, msg: string, extra: Record<string, any> = {}) {
     const entry: Entry = { ts: new Date().toISOString(), lvl, cmp, msg, ...extra };
     const line = JSON.stringify(entry);
     console.log(line);
-    try { fs.appendFileSync(this.fileFor(cmp), line + '\n'); } catch {}
+    try {
+      fs.appendFileSync(this.fileFor(cmp), line + '\n');
+    } catch {
+      /* best-effort: logging must not crash the app */
+    }
   }
 
-  debug(cmp: string, msg: string, extra?: Record<string,any>) { this.log('debug', cmp, msg, extra); }
-  info (cmp: string, msg: string, extra?: Record<string,any>) { this.log('info',  cmp, msg, extra); }
-  warn (cmp: string, msg: string, extra?: Record<string,any>) { this.log('warn',  cmp, msg, extra); }
-  error(cmp: string, msg: string, extra?: Record<string,any>) { this.log('error', cmp, msg, extra); }
+  debug(cmp: string, msg: string, extra?: Record<string, any>) {
+    this.log('debug', cmp, msg, extra);
+  }
+  info(cmp: string, msg: string, extra?: Record<string, any>) {
+    this.log('info', cmp, msg, extra);
+  }
+  warn(cmp: string, msg: string, extra?: Record<string, any>) {
+    this.log('warn', cmp, msg, extra);
+  }
+  error(cmp: string, msg: string, extra?: Record<string, any>) {
+    this.log('error', cmp, msg, extra);
+  }
 
   // 投递指标
   delivery(target: string, text: string, ms: number) {
     this.metrics.delivered++;
     this.metrics.totalLatency += ms;
     this.metrics.count++;
-    this.info('delivery', '投递成功', { target, text: text.slice(0,30), ms });
+    this.info('delivery', '投递成功', { target, text: text.slice(0, 30), ms });
   }
   deliveryFail(reason: string) {
     this.metrics.errors++;
@@ -60,7 +76,9 @@ class Logger {
     return {
       delivered: this.metrics.delivered,
       errors: this.metrics.errors,
-      avgLatencyMs: this.metrics.count ? Math.round(this.metrics.totalLatency / this.metrics.count) : 0,
+      avgLatencyMs: this.metrics.count
+        ? Math.round(this.metrics.totalLatency / this.metrics.count)
+        : 0,
       count: this.metrics.count,
     };
   }

@@ -11,19 +11,29 @@
  */
 
 import { Router } from '../../src/instance/router';
-import { Instance, InstanceRegistry, WindowSchema } from '../../src/instance/registry';
+import { Instance, InstanceRegistry } from '../../src/instance/registry';
 
 // ── Helper: build a mock Instance ──────────────────────────────
-function makeInst(name: string, hwnd: number, title: string, task: string, labels: string[] = []): Instance {
+function makeInst(
+  name: string,
+  hwnd: number,
+  title: string,
+  task: string,
+  labels: string[] = [],
+): Instance {
   return {
-    name, hwnd, title, tag: 'found', alive: true,
+    name,
+    hwnd,
+    title,
+    tag: 'found',
+    alive: true,
     schema: { labels, task, project: '', context: '' },
   };
 }
 
 // ── Helper: create a fake InstanceRegistry ──────────────────────
 function createMockRegistry(windows: Instance[], active: Instance | null = null) {
-  const map = new Map(windows.map(w => [w.name, w]));
+  const map = new Map(windows.map((w) => [w.name, w]));
 
   return {
     scan: jest.fn(() => windows),
@@ -63,7 +73,7 @@ function mockHttpsRequest(result: string | null, error?: boolean, timeout?: bool
     write: jest.fn(),
     end: jest.fn(),
     destroy: jest.fn(),
-    on: jest.fn((event: string, cb: Function) => {
+    on: jest.fn((event: string, cb: (data?: unknown) => void) => {
       if (event === 'error' && error) {
         process.nextTick(() => cb(new Error('mock error')));
       }
@@ -75,7 +85,7 @@ function mockHttpsRequest(result: string | null, error?: boolean, timeout?: bool
   };
 
   const mockRes: Record<string, any> = {
-    on: jest.fn((event: string, cb: Function) => {
+    on: jest.fn((event: string, cb: (data?: unknown) => void) => {
       if (event === 'data' && result !== null) {
         const json = { choices: [{ message: { content: result } }] };
         process.nextTick(() => cb(JSON.stringify(json)));
@@ -157,9 +167,7 @@ test('T1.10: 切换到xxx (no match) → does not swallow, still returns a windo
 
 // ── T1.11: Create command ──────────────────────────────────────
 test('T1.11: 新建窗口 → calls registry.create()', async () => {
-  const windows = [
-    makeInst('terminal', 111, '✳ 修复bug', '修复bug', ['bug']),
-  ];
+  const windows = [makeInst('terminal', 111, '✳ 修复bug', '修复bug', ['bug'])];
   const reg = createMockRegistry(windows);
   const router = new Router(reg);
 
@@ -210,9 +218,7 @@ test('T1.13: Non-Claude foreground → returns lastUsed immediately (dual-speed)
 
 // ── T1.14: LLM timeout → falls back to default ─────────────────
 test('T1.14: LLM timeout → falls back to default', async () => {
-  const windows = [
-    makeInst('terminal', 111, '✳ 修复bug', '修复bug', ['bug']),
-  ];
+  const windows = [makeInst('terminal', 111, '✳ 修复bug', '修复bug', ['bug'])];
   const reg = createMockRegistry(windows, null);
   const router = new Router(reg);
   expect(router.target).toBe('terminal');

@@ -59,7 +59,9 @@ export class DarwinPlatform implements Platform {
   }
 
   focusWindow(hwnd: number): void {
-    osa(`tell application "System Events" to set frontmost of first process whose unix id is ${hwnd} to true`);
+    osa(
+      `tell application "System Events" to set frontmost of first process whose unix id is ${hwnd} to true`,
+    );
   }
 
   closeWindow(hwnd: number): void {
@@ -96,14 +98,18 @@ export class DarwinPlatform implements Platform {
 
     poll();
 
-    return { stop: () => { stopped = true; } };
+    return {
+      stop: () => {
+        stopped = true;
+      },
+    };
   }
 
   sendKeys(...keys: string[]): void {
     if (keys.length === 0) return;
 
     const keyMap: Record<string, string> = {
-      ctrl: 'command down',  // macOS uses Cmd instead of Ctrl
+      ctrl: 'command down', // macOS uses Cmd instead of Ctrl
       v: 'v',
       enter: 'return',
       shift: 'shift down',
@@ -111,17 +117,19 @@ export class DarwinPlatform implements Platform {
       tab: 'tab',
     };
 
-    const mapped = keys.map(k => keyMap[k.toLowerCase()] || k).join(' ');
+    const mapped = keys.map((k) => keyMap[k.toLowerCase()] || k).join(' ');
     osa(`tell application "System Events" to keystroke "${mapped}"`);
   }
 
-  launchTerminal(title: string): number | null {
+  launchTerminal(_title: string): number | null {
     const before = new Set(this.findWindows().map((w) => w.hwnd));
     osa(`tell application "Terminal" to do script "claude"`);
 
     for (let i = 0; i < 20; i++) {
       const deadline = Date.now() + 500;
-      while (Date.now() < deadline) { /* spin */ }
+      while (Date.now() < deadline) {
+        /* spin */
+      }
       const after = this.findWindows();
       for (const w of after) {
         if (!before.has(w.hwnd)) return w.hwnd;
@@ -131,12 +139,14 @@ export class DarwinPlatform implements Platform {
   }
 
   getActiveWindow(): number | null {
-    const raw = osa([
-      'tell application "System Events"',
-      '  set activeProc to first process whose frontmost is true',
-      '  return unix id of activeProc',
-      'end tell',
-    ].join('\n'));
+    const raw = osa(
+      [
+        'tell application "System Events"',
+        '  set activeProc to first process whose frontmost is true',
+        '  return unix id of activeProc',
+        'end tell',
+      ].join('\n'),
+    );
     const pid = parseInt(raw, 10);
     return Number.isFinite(pid) ? pid : null;
   }

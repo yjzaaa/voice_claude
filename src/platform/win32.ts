@@ -15,7 +15,9 @@ const FOCUS_WIN = path.join(ROOT, 'focus_win.py');
 const KILL_WIN = path.join(ROOT, 'kill_win.py');
 const WATCH_WIN = path.join(ROOT, 'watch_win.py');
 
-function sleep(ms: number) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+function sleep(ms: number) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 
 export class Win32Platform implements Platform {
   private kb: ReturnType<typeof loadKb> | null = null;
@@ -27,7 +29,6 @@ export class Win32Platform implements Platform {
     return this.kb;
   }
 
-
   findWindows(): WindowInfo[] {
     try {
       const r = execSync(`"${PY}" "${FIND_WIN}"`, {
@@ -36,7 +37,8 @@ export class Win32Platform implements Platform {
         cwd: ROOT,
       }).trim();
       if (!r) return [];
-      return r.split('\n')
+      return r
+        .split('\n')
         .map((line) => {
           const [hwndStr, ...tp] = line.split('|');
           const hwnd = parseInt(hwndStr, 10);
@@ -48,7 +50,6 @@ export class Win32Platform implements Platform {
     }
   }
 
-
   focusWindow(hwnd: number): void {
     try {
       execSync(`"${PY}" "${FOCUS_WIN}" ${hwnd}`, { timeout: 2000, cwd: ROOT });
@@ -57,7 +58,6 @@ export class Win32Platform implements Platform {
     }
   }
 
-
   closeWindow(hwnd: number): void {
     try {
       execSync(`"${PY}" "${KILL_WIN}" ${hwnd}`, { timeout: 2000, cwd: ROOT });
@@ -65,7 +65,6 @@ export class Win32Platform implements Platform {
       /* best-effort */
     }
   }
-
 
   watchWindows(callback: (e: WatchEvent) => void): WatchHandle {
     const p = spawn(PY, [WATCH_WIN], { stdio: ['ignore', 'pipe', 'pipe'], cwd: ROOT });
@@ -90,11 +89,14 @@ export class Win32Platform implements Platform {
       stop: () => {
         if (killed) return;
         killed = true;
-        try { p.kill(); } catch { /* already dead */ }
+        try {
+          p.kill();
+        } catch {
+          /* already dead */
+        }
       },
     };
   }
-
 
   sendKeys(...keys: string[]): void {
     const kb = this.ensureKb();
@@ -133,7 +135,6 @@ export class Win32Platform implements Platform {
     }
   }
 
-
   launchTerminal(title: string): number | null {
     const before = new Set(this.findWindows().map((w) => w.hwnd));
     spawn('wt.exe', ['--title', title, 'cmd', '/c', 'claude'], {
@@ -151,7 +152,6 @@ export class Win32Platform implements Platform {
     return null;
   }
 
-
   getActiveWindow(): number | null {
     try {
       const r = execSync(
@@ -165,7 +165,6 @@ export class Win32Platform implements Platform {
     }
   }
 }
-
 
 function loadKb() {
   const koffi = require('koffi');

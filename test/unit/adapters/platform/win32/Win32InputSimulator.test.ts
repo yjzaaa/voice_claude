@@ -42,13 +42,41 @@ describe('Win32InputSimulator', () => {
     simulator.pasteAndEnter();
 
     expect(calls.map((c) => c.vk)).toEqual([
-      0x11, 0x56, 0x56, 0x11, // ctrl+v
-      0x0d, 0x0d,             // enter
+      0x11,
+      0x56,
+      0x56,
+      0x11, // ctrl+v
+      0x0d,
+      0x0d, // enter
     ]);
   });
 
   test('sendKeys inserts sleeps between events', () => {
     simulator.sendKeys('v');
     expect(sleeps.length).toBeGreaterThan(0);
+  });
+
+  test('typeText sends each character as unicode keyboard input', () => {
+    const inputs: { type: number; ki: { wScan: number; dwFlags: number } }[][] = [];
+    const sendInput = (batch: { type: number; ki: { wScan: number; dwFlags: number } }[]) => {
+      inputs.push(batch);
+    };
+    const sim = new Win32InputSimulator(
+      () => {},
+      () => {},
+      sendInput,
+    );
+
+    sim.typeText('Hi');
+
+    expect(inputs.length).toBe(2);
+    expect(inputs[0]).toEqual([
+      { type: 1, ki: { wScan: 72, dwFlags: 0x0004 } },
+      { type: 1, ki: { wScan: 72, dwFlags: 0x0006 } },
+    ]);
+    expect(inputs[1]).toEqual([
+      { type: 1, ki: { wScan: 105, dwFlags: 0x0004 } },
+      { type: 1, ki: { wScan: 105, dwFlags: 0x0006 } },
+    ]);
   });
 });

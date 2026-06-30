@@ -2,11 +2,17 @@ import * as http from 'http';
 import * as https from 'https';
 
 export interface HttpClient {
-  request(options: https.RequestOptions, callback: (res: http.IncomingMessage) => void): http.ClientRequest;
+  request(
+    options: https.RequestOptions,
+    callback: (res: http.IncomingMessage) => void,
+  ): http.ClientRequest;
 }
 
 class NodeHttpClient implements HttpClient {
-  request(options: https.RequestOptions, callback: (res: http.IncomingMessage) => void): http.ClientRequest {
+  request(
+    options: https.RequestOptions,
+    callback: (res: http.IncomingMessage) => void,
+  ): http.ClientRequest {
     const module = options.protocol === 'http:' ? http : https;
     return module.request(options, callback);
   }

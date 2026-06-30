@@ -6,7 +6,7 @@
  * NOTE: This is a best-effort stub.  It compiles and follows the
  * Platform contract but has NOT been tested on Linux.
  */
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 import { Platform, WindowInfo, WatchEvent, WatchHandle } from './index';
 
 /** Run a command, return stdout or '' on failure. */
@@ -19,7 +19,6 @@ function run(cmd: string): string {
 }
 
 export class LinuxPlatform implements Platform {
-
   findWindows(): WindowInfo[] {
     const raw = run('xdotool search --name "claude" 2>/dev/null');
     if (!raw) return [];
@@ -73,7 +72,11 @@ export class LinuxPlatform implements Platform {
 
     poll();
 
-    return { stop: () => { stopped = true; } };
+    return {
+      stop: () => {
+        stopped = true;
+      },
+    };
   }
 
   sendKeys(...keys: string[]): void {
@@ -95,9 +98,7 @@ export class LinuxPlatform implements Platform {
       space: 'space',
     };
 
-    const xdotoolKeys = keys
-      .map(k => keyMap[k.toLowerCase()] || k)
-      .join('+');
+    const xdotoolKeys = keys.map((k) => keyMap[k.toLowerCase()] || k).join('+');
 
     run(`xdotool key ${xdotoolKeys} 2>/dev/null`);
   }
@@ -122,7 +123,9 @@ export class LinuxPlatform implements Platform {
 
     for (let i = 0; i < 20; i++) {
       const deadline = Date.now() + 500;
-      while (Date.now() < deadline) { /* spin */ }
+      while (Date.now() < deadline) {
+        /* spin */
+      }
       const after = this.findWindows();
       for (const w of after) {
         if (!before.has(w.hwnd)) return w.hwnd;

@@ -31,7 +31,7 @@ function createMockPlatform(
   activeHwnd: number | null = null,
 ): Platform {
   return {
-    findWindows: jest.fn(() => windows.map(w => ({ hwnd: w.hwnd, title: w.title }))),
+    findWindows: jest.fn(() => windows.map((w) => ({ hwnd: w.hwnd, title: w.title }))),
     focusWindow: jest.fn(),
     closeWindow: jest.fn(),
     watchWindows: jest.fn(() => ({ stop: jest.fn() })),
@@ -68,14 +68,14 @@ test('T1.16: scan with 2 windows → correctly parsed', () => {
   expect(list).toHaveLength(2);
 
   // Check first window
-  const w1 = list.find(w => w.hwnd === 111);
+  const w1 = list.find((w) => w.hwnd === 111);
   expect(w1).toBeDefined();
   expect(w1!.name).toBe('terminal'); // first window gets 'terminal'
   expect(w1!.title).toBe('✳ 修复bug');
   expect(w1!.alive).toBe(true);
 
   // Check second window
-  const w2 = list.find(w => w.hwnd === 222);
+  const w2 = list.find((w) => w.hwnd === 222);
   expect(w2).toBeDefined();
   expect(w2!.name).toBe('terminal-2');
   expect(w2!.title).toBe('claude');
@@ -100,9 +100,7 @@ test('T1.17: scan twice with same windows → no duplicates', () => {
 
 // ── T1.18: New window gets Schema from title ───────────────────
 test('T1.18: new window gets default Schema from title', () => {
-  const platform = createMockPlatform([
-    { hwnd: 111, title: '✳ 修复bug' },
-  ]);
+  const platform = createMockPlatform([{ hwnd: 111, title: '✳ 修复bug' }]);
   const reg = new InstanceRegistry(platform);
 
   reg.scan();
@@ -112,7 +110,7 @@ test('T1.18: new window gets default Schema from title', () => {
   const inst = list[0];
   // Schema should be populated synchronously from title extraction
   expect(inst.schema.task).toBe('修复bug'); // extracted from "✳ 修复bug"
-  expect(inst.schema.labels).toEqual([]);   // labels are async, initially empty
+  expect(inst.schema.labels).toEqual([]); // labels are async, initially empty
   expect(inst.schema.project).toBe('');
   expect(inst.schema.context).toBe('');
 

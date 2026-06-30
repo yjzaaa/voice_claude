@@ -4,7 +4,7 @@ import { WindowEvent } from '../../../../../src/ports/incoming/WindowManager';
 describe('Win32WindowManager', () => {
   let execCalls: { command: string; options: any }[];
   let spawnCalls: { command: string; args: string[]; options: any }[];
-  let eventHandlers: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } = {};
+  const eventHandlers: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } = {};
   let fakeProcess: { kill: jest.Mock; stdout: { on: jest.Mock }; stderr: { on: jest.Mock } };
   let manager: Win32WindowManager;
 
@@ -23,8 +23,16 @@ describe('Win32WindowManager', () => {
 
     fakeProcess = {
       kill: jest.fn(),
-      stdout: { on: jest.fn((event, cb) => { eventHandlers.stdout = cb; }) },
-      stderr: { on: jest.fn((event, cb) => { eventHandlers.stderr = cb; }) },
+      stdout: {
+        on: jest.fn((event, cb) => {
+          eventHandlers.stdout = cb;
+        }),
+      },
+      stderr: {
+        on: jest.fn((event, cb) => {
+          eventHandlers.stderr = cb;
+        }),
+      },
     };
 
     const spawn = (command: string, args: string[], options: any) => {
@@ -54,7 +62,9 @@ describe('Win32WindowManager', () => {
     const failingManager = new Win32WindowManager({
       pythonExecutable: 'py.exe',
       scriptRoot: '/scripts',
-      execSync: () => { throw new Error('boom'); },
+      execSync: () => {
+        throw new Error('boom');
+      },
       spawn: () => fakeProcess as any,
     });
     expect(failingManager.findWindows()).toEqual([]);
@@ -80,7 +90,9 @@ describe('Win32WindowManager', () => {
     const failingManager = new Win32WindowManager({
       pythonExecutable: 'py.exe',
       scriptRoot: '/scripts',
-      execSync: () => { throw new Error('boom'); },
+      execSync: () => {
+        throw new Error('boom');
+      },
       spawn: () => fakeProcess as any,
     });
     expect(failingManager.getActiveWindow()).toBeNull();
@@ -93,7 +105,9 @@ describe('Win32WindowManager', () => {
     expect(spawnCalls[0].command).toBe('py.exe');
     expect(spawnCalls[0].args[0]).toContain('watch_win.py');
 
-    eventHandlers.stdout!(Buffer.from(JSON.stringify({ event: 'create', hwnd: 103, title: 'new' })));
+    eventHandlers.stdout!(
+      Buffer.from(JSON.stringify({ event: 'create', hwnd: 103, title: 'new' })),
+    );
     eventHandlers.stdout!(Buffer.from('\n'));
 
     expect(events).toEqual([{ type: 'create', id: 103, title: 'new' }]);

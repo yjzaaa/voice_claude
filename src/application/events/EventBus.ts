@@ -3,10 +3,18 @@
  * Domain/Application code publishes and subscribes here instead of
  * depending on Electron IPC or concrete adapters.
  */
-export type EventPayload = Record<string, unknown> | string | number | boolean | unknown[] | undefined;
+export type EventPayload =
+  Record<string, unknown> | string | number | boolean | unknown[] | undefined;
+
+interface EventBusOptions {
+  /** Optional handler for subscriber exceptions. Receives event name and the thrown value. */
+  onError?: (event: string, error: unknown) => void;
+}
 
 export class EventBus {
   private listeners = new Map<string, Set<(payload: EventPayload) => void>>();
+
+  constructor(private options: EventBusOptions = {}) {}
 
   on(event: string, handler: (payload: EventPayload) => void): () => void {
     if (!this.listeners.has(event)) {
@@ -30,10 +38,13 @@ export class EventBus {
       try {
         handler(payload);
       } catch (err) {
-        // EventBus should not crash if a subscriber throws.
-        // In production, a logger port will be injected later.
-        // eslint-disable-next-line no-console
-        console.error(`[EventBus] handler for "${event}" threw:`, err);
+        if (this.options.onError) {
+          this.options.onError(event, err);
+        } else {
+          // EventBus should not crash if a subscriber throws.
+          // eslint-disable-next-line no-console
+          console.error(`[EventBus] handler for "${event}" threw:`, err);
+        }
       }
     }
   }

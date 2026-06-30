@@ -1,4 +1,7 @@
-import { HttpsJsonClient, HttpClient } from '../../../../../src/adapters/llm/internal/HttpsJsonClient';
+import {
+  HttpsJsonClient,
+  HttpClient,
+} from '../../../../../src/adapters/llm/internal/HttpsJsonClient';
 
 type ResponseLike = { on(event: 'data' | 'end', cb: any): void; statusCode?: number };
 
@@ -11,9 +14,11 @@ type RequestLike = {
   _timeoutHandler?: () => void;
 };
 
-function makeFakeClient(
-  response: ResponseLike,
-): { calls: { options: any; body?: string }[]; getLastReq: () => RequestLike | undefined; client: HttpClient } {
+function makeFakeClient(response: ResponseLike): {
+  calls: { options: any; body?: string }[];
+  getLastReq: () => RequestLike | undefined;
+  client: HttpClient;
+} {
   const calls: { options: any; body?: string }[] = [];
   let lastReq: RequestLike | undefined;
   const client = {
@@ -24,8 +29,12 @@ function makeFakeClient(
           if (event === 'error') req._errorHandler = handler;
           if (event === 'timeout') req._timeoutHandler = handler;
         },
-        write: (data) => { calls[calls.length - 1].body = data.toString(); },
-        end: () => { callback(response); },
+        write: (data) => {
+          calls[calls.length - 1].body = data.toString();
+        },
+        end: () => {
+          callback(response);
+        },
         destroy: jest.fn(),
       };
       lastReq = req;

@@ -4,6 +4,12 @@ contextBridge.exposeInMainWorld('voiceAPI', {
   send: (text: string) => ipcRenderer.send('voice:text', text),
 });
 
+contextBridge.exposeInMainWorld('agentAPI', {
+  on: (event: string, fn: (...args: any[]) => void) =>
+    ipcRenderer.on(`agent:${event}`, (_e, ...args) => fn(...args)),
+  removeAllListeners: (event: string) => ipcRenderer.removeAllListeners(`agent:${event}`),
+});
+
 contextBridge.exposeInMainWorld('recorderAPI', {
   ready: () => ipcRenderer.send('recorder:ready'),
   sendPcm: (buffer: ArrayBuffer) => ipcRenderer.send('recorder:pcm', buffer),
@@ -17,10 +23,12 @@ contextBridge.exposeInMainWorld('recorderAPI', {
 
 contextBridge.exposeInMainWorld('statusAPI', {
   toggle: () => ipcRenderer.send('status:toggle'),
-  onStateChange: (fn: (recording: boolean) => void) => ipcRenderer.on('status:state', (_e, recording) => fn(recording)),
+  onStateChange: (fn: (recording: boolean) => void) =>
+    ipcRenderer.on('status:state', (_e, recording) => fn(recording)),
   removeAllListeners: () => ipcRenderer.removeAllListeners('status:state'),
 });
 
 contextBridge.exposeInMainWorld('loggerAPI', {
-  log: (level: string, cmp: string, msg: string, extra?: any) => ipcRenderer.send('renderer:log', level, cmp, msg, extra),
+  log: (level: string, cmp: string, msg: string, extra?: any) =>
+    ipcRenderer.send('renderer:log', level, cmp, msg, extra),
 });

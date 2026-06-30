@@ -6,9 +6,12 @@ import { execSync } from 'child_process';
 function ps(script: string): string {
   try {
     return execSync(`powershell -NoProfile -Command "${script.replace(/"/g, '\\"')}"`, {
-      encoding: 'utf-8', timeout: 5000,
+      encoding: 'utf-8',
+      timeout: 5000,
     }).trim();
-  } catch { return ''; }
+  } catch {
+    return '';
+  }
 }
 
 /** 查找 Claude Code 窗口 */
@@ -56,13 +59,17 @@ export function findClaudeWindows(): { hwnd: number; title: string; kind: string
         result.push({ hwnd: parseInt(item.hwnd), title: item.title, kind: item.kind });
       }
     }
-  } catch { /* PowerShell failed, return empty */ }
+  } catch {
+    /* PowerShell failed, return empty */
+  }
   return result;
 }
 
 /** 获取前台窗口 HWND */
 export function getForegroundHwnd(): number | null {
-  const r = ps('[System.Windows.Forms.Form]::ActiveForm; (Get-Process -Id (Get-Process | ?{$_.MainWindowTitle -ne ""} | Select -First 1).Id).MainWindowHandle');
+  const r = ps(
+    '[System.Windows.Forms.Form]::ActiveForm; (Get-Process -Id (Get-Process | ?{$_.MainWindowTitle -ne ""} | Select -First 1).Id).MainWindowHandle',
+  );
   return r ? parseInt(r) || null : null;
 }
 
@@ -85,18 +92,25 @@ export function setClipboard(text: string): void {
 
 /** 获取剪贴板文字 */
 export function getClipboard(): string {
-  return ps('Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::GetText()');
+  return ps(
+    'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::GetText()',
+  );
 }
 
 /** 发送组合键 (Ctrl+V, Enter 等) 到指定窗口 */
 export function sendKeys(hwnd: number, ...keys: string[]): void {
-  const keyMap: Record<string, number> = { ctrl: 0x11, v: 0x56, enter: 0x0D };
-  const codes = keys.map(k => keyMap[k] || 0).filter(Boolean);
+  const keyMap: Record<string, number> = { ctrl: 0x11, v: 0x56, enter: 0x0d };
+  const codes = keys.map((k) => keyMap[k] || 0).filter(Boolean);
   if (codes.length === 0) return;
   focusWindow(hwnd);
 
-  const presses = codes.map(c => `[Win32.Win32]::keybd_event(${c}, 0, 0, 0)`).join('; Start-Sleep -Milliseconds 30; ');
-  const releases = codes.reverse().map(c => `[Win32.Win32]::keybd_event(${c}, 0, 2, 0)`).join('; Start-Sleep -Milliseconds 30; ');
+  const presses = codes
+    .map((c) => `[Win32.Win32]::keybd_event(${c}, 0, 0, 0)`)
+    .join('; Start-Sleep -Milliseconds 30; ');
+  const releases = codes
+    .reverse()
+    .map((c) => `[Win32.Win32]::keybd_event(${c}, 0, 2, 0)`)
+    .join('; Start-Sleep -Milliseconds 30; ');
   ps(`
     Add-Type -Name Win32 -Namespace Win32 -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, int flags, IntPtr extra);'
     ${presses}; Start-Sleep -Milliseconds 80; ${releases}
@@ -111,7 +125,7 @@ export function pasteAndEnter(hwnd: number): void {
 
 /** 启动新 Claude Code 窗口 */
 export function launchClaudeCode(title: string): number | null {
-  const before = new Set(findClaudeWindows().map(w => w.hwnd));
+  const before = new Set(findClaudeWindows().map((w) => w.hwnd));
   ps(`Start-Process wt.exe -ArgumentList '--title','${title}','cmd','/c','claude'`);
   // 等新窗口
   for (let i = 0; i < 20; i++) {

@@ -16,7 +16,9 @@ describe('useRecordingState', () => {
 
     (window as any).statusAPI = {
       toggle,
-      onStateChange: (fn: (recording: boolean) => void) => { stateChangeHandler = fn; },
+      onStateChange: (fn: (recording: boolean) => void) => {
+        stateChangeHandler = fn;
+      },
       removeAllListeners: jest.fn(),
     };
 

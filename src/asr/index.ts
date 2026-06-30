@@ -39,6 +39,6 @@ export async function transcribe(audio: Buffer, options: AsrOptions = {}): Promi
  * 用于验证集成是否正常工作
  */
 export async function testTranscribe(audio: Buffer): Promise<string | null> {
-  if (audio.every(b => b === 0)) return null;
+  if (audio.every((b) => b === 0)) return null;
   return '测试语音识别';
 }

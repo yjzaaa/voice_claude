@@ -7,7 +7,6 @@
  * linux           X11 ID (number) xdotool
  */
 
-
 export interface WindowInfo {
   hwnd: number;
   title: string;
@@ -50,7 +49,6 @@ export interface Platform {
   /** Return the numeric identifier of the currently active window, or null. */
   getActiveWindow(): number | null;
 }
-
 
 let _platform: Platform | null = null;
 

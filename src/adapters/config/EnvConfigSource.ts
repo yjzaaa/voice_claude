@@ -24,7 +24,11 @@ export class EnvConfigSource implements ConfigSource {
         sampleRate: envNumber('VOICE_CLAUDE_ASR_SAMPLE_RATE') || 16000,
       },
       llm: {
-        apiKey: requiredString('VOICE_CLAUDE_LLM_API_KEY'),
+        apiKey:
+          env('VOICE_CLAUDE_LLM_API_KEY') ||
+          env('VOICE_CLAUDE_LLM_KEY') ||
+          env('DEEPSEEK_API_KEY') ||
+          '',
         apiUrl: env('VOICE_CLAUDE_LLM_API_URL') || 'https://api.deepseek.com/v1',
         model: env('VOICE_CLAUDE_LLM_MODEL') || 'deepseek-chat',
         timeoutMs: envNumber('VOICE_CLAUDE_LLM_TIMEOUT_MS') || 5000,

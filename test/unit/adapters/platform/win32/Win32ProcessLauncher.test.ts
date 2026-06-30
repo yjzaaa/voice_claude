@@ -64,7 +64,9 @@ describe('Win32ProcessLauncher', () => {
       getActiveWindow: () => null,
       watchEvents: () => ({ stop: () => {} }),
     };
-    const launcher = new Win32ProcessLauncher(windowManager, spawn, () => Promise.resolve(), { maxAttempts: 1 });
+    const launcher = new Win32ProcessLauncher(windowManager, spawn, () => Promise.resolve(), {
+      maxAttempts: 1,
+    });
     await launcher.launchTerminal('dev-1');
     expect(unrefSpy).toHaveBeenCalled();
   });

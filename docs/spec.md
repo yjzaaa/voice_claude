@@ -302,6 +302,87 @@
 
 ---
 
+## Phase 8：Agent 重写（Level 3 半自主 Agent）
+
+### 目标
+
+参考 `learn-claude-code` 的 permission / hook / task / subagent / memory / skill / MCP 等模式，把 voice_claude 从“语音命令执行器”升级为 **常驻 VAD 自动触发的半自主桌面 agent**。
+
+核心体验：用户无需唤醒词、无需按键，说话即被 agent 理解、规划、执行。
+
+### 关键决策
+
+| 决策项 | 选择 |
+|--------|------|
+| 自主程度 | Level 3：大部分操作自主执行，关键操作受硬边界限制 |
+| 触发方式 | 常驻 VAD 自动触发；托盘/热键用于暂停/恢复 |
+| 误触发过滤 | 单次 LLM 返回 `{ isCommand, confidence, plan, reason }`；confidence 阈值过滤 |
+| 工具体系 | `ToolRegistry` + `SkillRegistry`，参考 `learn-claude-code` 的 tool/skill 模式 |
+| 规划粒度 | 多步计划 + 顺序执行，执行前检查 `canAutoExecute` |
+| 失败恢复 | 重试 → 重新规划 → 询问用户 |
+| 文本输入 | `InputSimulator.typeText()` 直接模拟键盘，绕过剪贴板竞争 |
+| 记忆 | 短期内存 + JSON 文件长期偏好（`MemoryStore` port） |
+| 审计 | 独立 `audit.log` + UI 时间线 |
+| 实施策略 | 受控大爆炸：`agent-rewrite` 分支，按垂直切片推进，每片可编译可测试 |
+
+### 安全边界（硬限制）
+
+| 操作 | 默认行为 |
+|------|----------|
+| 读操作 | 允许自主执行 |
+| 低风险写操作（聚焦、发送文本） | 允许自主执行 |
+| 中风险写操作（启动已知进程） | 允许；首次启动未知程序时询问 |
+| 高风险写操作（关闭窗口、shell、修改文件、网络） | 默认禁止；白名单后才允许 |
+| 不可逆操作（删除文件、清空回收站） | 永远禁止自主执行 |
+
+### 新增/修改文件
+
+| 路径 | 说明 |
+|------|------|
+| `src/ports/incoming/InputSimulator.ts` | 增加 `typeText(text)` |
+| `src/adapters/platform/win32/Win32InputSimulator.ts` | 用 `SendInput` Unicode 实现 `typeText` |
+| `src/domain/services/ToolRegistry.ts` | 工具注册、校验、调用 |
+| `src/domain/services/SkillRegistry.ts` | 加载 `~/.voice_claude/skills/*.json` |
+| `src/domain/services/AgentPlanner.ts` | 单次 LLM 调用生成 `isCommand + plan` |
+| `src/domain/services/PlanExecutor.ts` | 执行计划、重试、重新规划、询问用户 |
+| `src/domain/services/RiskClassifier.ts` | 给计划标注风险并计算 `canAutoExecute` |
+| `src/application/agent/VoiceAgent.ts` | agent 主循环：VAD → ASR → 规划 → 执行 |
+| `src/application/audit/AuditLogger.ts` | 只追加审计日志 |
+| `src/ports/outgoing/MemoryStore.ts` | 记忆持久化接口 |
+| `src/infrastructure/persistence/JsonFileMemoryStore.ts` | JSON 文件实现 |
+| `src/infrastructure/scheduler/CronScheduler.ts` | Cron 调度窗口扫描 |
+| `src/renderer/status/**` | 扩展为 agent 仪表盘 |
+| `src/composition-root.ts` | 装配 agent 所需服务 |
+| `src/main.ts` | 从旧 bootstrap 切换到 `VoiceAgent` |
+
+### 测试要求
+
+- `InputSimulator.typeText` 把每个字符作为 Unicode 键盘事件发送。
+- `ToolRegistry` 注册工具、执行成功、找不到工具、参数校验失败。
+- `AgentPlanner` 对指令返回 `isCommand=true` 和合法 plan；对闲聊返回 `isCommand=false`。
+- `PlanExecutor` 顺序执行步骤，失败时重试，重试失败后重新规划，仍失败后询问用户。
+- `RiskClassifier` 正确识别高风险计划并标记 `canAutoExecute=false`。
+- `VoiceAgent` 完整流程：ASR 文本 → plan → execute → audit event。
+- `JsonFileMemoryStore` 读写持久化。
+- `AuditLogger` 只追加不可改。
+
+### 日志/文档要求
+
+- `docs/design/agent-rewrite.md`：完整设计文档。
+- `docs/progress/phase-agent.md`：记录每一切片完成情况。
+
+### 验收标准
+
+- `npx jest --testPathPatterns='test/unit' --testTimeout=30000` 全部通过。
+- `npm run build` 通过。
+- 手动验证：
+  - 说“打开 Claude Code” → agent 启动新实例。
+  - 说“发给 terminal-1 你好” → agent 聚焦 terminal-1 并输入文本。
+  - 说“关闭 terminal-1” → 默认禁止，UI 提示需要授权。
+  - 检查 `logs/audit.jsonl` 有完整记录。
+
+---
+
 ## 事件契约
 
 所有内部事件定义在 `src/application/events/AppEvents.ts`：

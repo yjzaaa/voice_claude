@@ -19,7 +19,11 @@ export class InMemoryMetrics implements MetricsCollector {
   getSnapshot(): Record<string, { count: number; sum: number; values: number[] } | number> {
     const snapshot: Record<string, { count: number; sum: number; values: number[] } | number> = {};
     for (const [key, values] of this.distributions) {
-      snapshot[key] = { count: values.length, sum: values.reduce((a, b) => a + b, 0), values: [...values] };
+      snapshot[key] = {
+        count: values.length,
+        sum: values.reduce((a, b) => a + b, 0),
+        values: [...values],
+      };
     }
     for (const [key, count] of this.counters) {
       snapshot[key] = count;

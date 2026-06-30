@@ -17,7 +17,9 @@ describe('ElectronAudioCapture', () => {
     fakeWindow = {
       webContents: { send: (channel: string, ...args: any[]) => sent.push({ channel, args }) },
       loadFile: jest.fn().mockResolvedValue(undefined),
-      on: (event: string, cb: (...args: any[]) => void) => { windowEvents[event] = cb; },
+      on: (event: string, cb: (...args: any[]) => void) => {
+        windowEvents[event] = cb;
+      },
       isDestroyed: () => false,
       close: jest.fn(),
     };
@@ -28,7 +30,9 @@ describe('ElectronAudioCapture', () => {
     };
 
     const ipcMain = {
-      on: (channel: string, cb: (event: any, ...args: any[]) => void) => { ipcHandlers[channel] = cb; },
+      on: (channel: string, cb: (event: any, ...args: any[]) => void) => {
+        ipcHandlers[channel] = cb;
+      },
     };
 
     capture = new ElectronAudioCapture({
@@ -59,7 +63,10 @@ describe('ElectronAudioCapture', () => {
     expect(states).toEqual([true]);
 
     const pcm = Buffer.from([1, 2, 3]);
-    ipcHandlers['recorder:pcm']?.({}, pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
+    ipcHandlers['recorder:pcm']?.(
+      {},
+      pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength),
+    );
     expect(states).toEqual([true, false]);
   });
 
@@ -74,7 +81,10 @@ describe('ElectronAudioCapture', () => {
     expect(sent.some((m) => m.channel === 'recorder:stop')).toBe(true);
 
     const pcm = Buffer.from([0xab, 0xcd]);
-    ipcHandlers['recorder:pcm']?.({}, pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
+    ipcHandlers['recorder:pcm']?.(
+      {},
+      pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength),
+    );
 
     const result = await stopPromise;
     expect(result).toEqual(pcm);
@@ -93,7 +103,10 @@ describe('ElectronAudioCapture', () => {
 
     // simulate pcm to complete stop
     const pcm = Buffer.from([1]);
-    ipcHandlers['recorder:pcm']?.({}, pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
+    ipcHandlers['recorder:pcm']?.(
+      {},
+      pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength),
+    );
   });
 
   test('does not start twice', () => {

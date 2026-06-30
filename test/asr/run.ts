@@ -8,13 +8,13 @@
  * Compares output with expected text from corresponding .txt file.
  * Usage: npx ts-node test/asr/run.ts
  */
-import * as fs from "fs";
-import * as path from "path";
-import * as http from "http";
-import { transcribe as doubaoTranscribe } from "../../src/asr/doubao";
+import * as fs from 'fs';
+import * as path from 'path';
+import * as http from 'http';
+import { transcribe as doubaoTranscribe } from '../../src/asr/doubao';
 
-const FIXTURES_DIR = path.resolve(__dirname, "fixtures");
-const CHROME_ASR_URL = "http://localhost:9877/send";
+const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
+const CHROME_ASR_URL = 'http://localhost:9877/send';
 
 interface TestResult {
   backend: string;
@@ -22,7 +22,7 @@ interface TestResult {
   expected: string;
   actual: string | null;
   matchPct: number;
-  status: "PASS" | "FAIL";
+  status: 'PASS' | 'FAIL';
 }
 
 /**
@@ -83,19 +83,19 @@ function testChromeSpeech(audioPath: string): Promise<string | null> {
         hostname: url.hostname,
         port: url.port || 9877,
         path: url.pathname,
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/octet-stream",
-          "Content-Length": audio.length,
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': audio.length,
         },
         timeout: 30000,
       },
       (res) => {
-        let data = "";
-        res.on("data", (chunk: Buffer) => {
-          data += chunk.toString("utf-8");
+        let data = '';
+        res.on('data', (chunk: Buffer) => {
+          data += chunk.toString('utf-8');
         });
-        res.on("end", () => {
+        res.on('end', () => {
           try {
             const json = JSON.parse(data);
             resolve(json.text || null);
@@ -104,11 +104,11 @@ function testChromeSpeech(audioPath: string): Promise<string | null> {
             resolve(data.trim() || null);
           }
         });
-        res.on("error", () => resolve(null));
+        res.on('error', () => resolve(null));
       },
     );
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => {
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => {
       req.destroy();
       resolve(null);
     });
@@ -127,97 +127,98 @@ async function main() {
   // Discover fixtures
   let files: string[];
   try {
-    files = fs.readdirSync(FIXTURES_DIR)
-      .filter((f) => f.endsWith(".pcm"))
+    files = fs
+      .readdirSync(FIXTURES_DIR)
+      .filter((f) => f.endsWith('.pcm'))
       .sort();
   } catch {
     console.error(`Fixtures directory not found: ${FIXTURES_DIR}`);
-    console.error("Create test recordings or placeholder PCM files in test/asr/fixtures/");
+    console.error('Create test recordings or placeholder PCM files in test/asr/fixtures/');
     process.exit(1);
   }
 
   if (files.length === 0) {
-    console.log("No .pcm fixtures found in " + FIXTURES_DIR);
-    console.log("Use test/asr/capture.html to record audio samples.");
+    console.log('No .pcm fixtures found in ' + FIXTURES_DIR);
+    console.log('Use test/asr/capture.html to record audio samples.');
     process.exit(1);
   }
 
-  console.log("ASR Test Runner");
-  console.log("=".repeat(60));
-  console.log("Fixtures directory: " + FIXTURES_DIR);
-  console.log("Found " + files.length + " fixture(s)\n");
+  console.log('ASR Test Runner');
+  console.log('='.repeat(60));
+  console.log('Fixtures directory: ' + FIXTURES_DIR);
+  console.log('Found ' + files.length + ' fixture(s)\n');
 
   const allResults: TestResult[] = [];
 
   for (const file of files) {
-    const name = path.basename(file, ".pcm");
-    const txtPath = path.join(FIXTURES_DIR, name + ".txt");
+    const name = path.basename(file, '.pcm');
+    const txtPath = path.join(FIXTURES_DIR, name + '.txt');
 
     if (!fs.existsSync(txtPath)) {
       console.log(`[SKIP] ${file} → missing ${name}.txt (expected text file)`);
-      console.log("");
+      console.log('');
       continue;
     }
 
-    const expected = fs.readFileSync(txtPath, "utf-8").trim();
+    const expected = fs.readFileSync(txtPath, 'utf-8').trim();
     const audioPath = path.join(FIXTURES_DIR, file);
 
     if (!expected) {
       console.log(`[SKIP] ${file} → ${name}.txt is empty`);
-      console.log("");
+      console.log('');
       continue;
     }
 
     console.log(`--- ${file} ---`);
 
     // ---- Doubao v3 ----
-    console.log("  Doubao v3: transcribing...");
+    console.log('  Doubao v3: transcribing...');
     const doubaoStart = Date.now();
     const doubaoResult = await testDoubao(audioPath);
     const doubaoTime = Date.now() - doubaoStart;
     const doubaoMatch = matchPercent(expected, doubaoResult);
     const doubaoResult_: TestResult = {
-      backend: "doubao",
+      backend: 'doubao',
       fixture: file,
       expected,
       actual: doubaoResult,
       matchPct: doubaoMatch,
-      status: doubaoMatch >= 50 ? "PASS" : "FAIL",
+      status: doubaoMatch >= 50 ? 'PASS' : 'FAIL',
     };
     allResults.push(doubaoResult_);
-    console.log("  " + formatResult(doubaoResult_) + ` (${doubaoTime}ms)`);
+    console.log('  ' + formatResult(doubaoResult_) + ` (${doubaoTime}ms)`);
 
     // ---- Chrome Web Speech ----
-    console.log("  Chrome Web Speech: transcribing...");
+    console.log('  Chrome Web Speech: transcribing...');
     const chromeStart = Date.now();
     const chromeResult = await testChromeSpeech(audioPath);
     const chromeTime = Date.now() - chromeStart;
     const chromeMatch = matchPercent(expected, chromeResult);
     const chromeResult_: TestResult = {
-      backend: "chrome",
+      backend: 'chrome',
       fixture: file,
       expected,
       actual: chromeResult,
       matchPct: chromeMatch,
-      status: chromeMatch >= 50 ? "PASS" : "FAIL",
+      status: chromeMatch >= 50 ? 'PASS' : 'FAIL',
     };
     allResults.push(chromeResult_);
-    console.log("  " + formatResult(chromeResult_) + ` (${chromeTime}ms)`);
+    console.log('  ' + formatResult(chromeResult_) + ` (${chromeTime}ms)`);
 
-    console.log("");
+    console.log('');
   }
 
   // Summary
   const total = allResults.length;
-  const passed = allResults.filter((r) => r.status === "PASS").length;
+  const passed = allResults.filter((r) => r.status === 'PASS').length;
   const failed = total - passed;
 
-  console.log("=".repeat(60));
+  console.log('='.repeat(60));
   console.log(`Results: ${passed} passed, ${failed} failed out of ${total} tests`);
   process.exit(failed > 0 ? 1 : 0);
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  console.error('Fatal error:', err);
   process.exit(1);
 });
