@@ -17,6 +17,7 @@ asr_test.log
 .voice_claude.memory.json
 models/
 test-results/
+verification-screenshots/
 
 # Coverage
 coverage/
