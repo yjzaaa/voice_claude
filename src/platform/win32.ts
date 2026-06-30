@@ -9,7 +9,7 @@ import * as path from 'path';
 import { Platform, WindowInfo, WatchEvent, WatchHandle } from './index';
 
 const PY = 'D:/autoclaw/resources/python/python.exe';
-const ROOT = path.join(__dirname, '..', '..', '..');
+const ROOT = path.join(__dirname, '..', '..');
 const FIND_WIN = path.join(ROOT, 'find_win.py');
 const FOCUS_WIN = path.join(ROOT, 'focus_win.py');
 const KILL_WIN = path.join(ROOT, 'kill_win.py');
@@ -33,6 +33,7 @@ export class Win32Platform implements Platform {
       const r = execSync(`"${PY}" "${FIND_WIN}"`, {
         timeout: 3000,
         encoding: 'utf-8',
+        cwd: ROOT,
       }).trim();
       if (!r) return [];
       return r.split('\n')
@@ -50,7 +51,7 @@ export class Win32Platform implements Platform {
 
   focusWindow(hwnd: number): void {
     try {
-      execSync(`"${PY}" "${FOCUS_WIN}" ${hwnd}`, { timeout: 2000 });
+      execSync(`"${PY}" "${FOCUS_WIN}" ${hwnd}`, { timeout: 2000, cwd: ROOT });
     } catch {
       /* best-effort */
     }
@@ -59,7 +60,7 @@ export class Win32Platform implements Platform {
 
   closeWindow(hwnd: number): void {
     try {
-      execSync(`"${PY}" "${KILL_WIN}" ${hwnd}`, { timeout: 2000 });
+      execSync(`"${PY}" "${KILL_WIN}" ${hwnd}`, { timeout: 2000, cwd: ROOT });
     } catch {
       /* best-effort */
     }
@@ -67,7 +68,7 @@ export class Win32Platform implements Platform {
 
 
   watchWindows(callback: (e: WatchEvent) => void): WatchHandle {
-    const p = spawn(PY, [WATCH_WIN], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(PY, [WATCH_WIN], { stdio: ['ignore', 'pipe', 'pipe'], cwd: ROOT });
     let buf = '';
     const handler = (d: Buffer) => {
       buf += d.toString();

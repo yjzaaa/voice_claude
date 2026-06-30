@@ -1,6 +1,82 @@
-<!DOCTYPE html><html><head><meta charset="UTF-8"><title>voice_claude</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:rgba(18,18,36,.96);color:#e0e0e0;border-radius:16px;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;-webkit-app-region:drag;user-select:none}
-h2{color:#888;font-size:1em}p{color:#00e676;font-size:1.2em;margin-top:8px}</style></head><body>
-<h2>🎤 Chrome 语音窗口已打开</h2><p>在那个窗口中说话</p>
-</body></html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>voice_claude</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:rgba(18,18,36,.96);color:#e0e0e0;border-radius:16px;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;user-select:none;overflow:hidden;position:relative}
+.drag{position:absolute;top:0;left:0;right:0;height:28px;-webkit-app-region:drag}
+#icon{font-size:2.5em;margin-bottom:6px;margin-top:14px;transition:transform .2s}
+#icon.recording{animation:pulse 1s infinite;color:#e94560}
+@keyframes pulse{50%{opacity:.6;transform:scale(1.1)}}
+h2{color:#888;font-size:.95em}p{color:#00e676;font-size:1.05em;margin-top:6px}
+button{margin-top:10px;padding:8px 20px;border:none;border-radius:8px;background:#00e676;color:#000;font-size:.95em;cursor:pointer;-webkit-app-region:no-drag;outline:none}
+button.recording{background:#e94560;color:#fff}
+button:active{transform:scale(.96)}
+#debug{font-size:.65em;color:#888;margin-top:8px;max-width:280px;text-align:center;min-height:1.2em}
+</style>
+</head>
+<body>
+<div class="drag"></div>
+<div id="icon">🎤</div>
+<h2 id="title">voice_claude</h2>
+<p id="state">就绪</p>
+<button id="btn">开始录音</button>
+<div id="debug"></div>
+<script>
+const api = window.statusAPI;
+const log = window.loggerAPI?.log || ((level, cmp, msg, extra) => console.log(`[${level}][${cmp}]`, msg, extra));
+const iconEl = document.getElementById('icon');
+const stateEl = document.getElementById('state');
+const btnEl = document.getElementById('btn');
+const debugEl = document.getElementById('debug');
+
+function logR(msg, extra) { log('info', 'status-renderer', msg, extra); }
+function logE(msg, extra) { log('error', 'status-renderer', msg, extra); }
+
+function setRecording(recording) {
+  logR('state change', { recording });
+  if (recording) {
+    iconEl.classList.add('recording');
+    stateEl.textContent = '🔴 录音中...';
+    btnEl.textContent = '停止录音';
+    btnEl.classList.add('recording');
+    debugEl.textContent = '正在听，请说话（静音1.5秒自动结束）';
+  } else {
+    iconEl.classList.remove('recording');
+    stateEl.textContent = '就绪';
+    btnEl.textContent = '开始录音';
+    btnEl.classList.remove('recording');
+    debugEl.textContent = '';
+  }
+}
+
+btnEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  logR('button clicked');
+  if (!api) {
+    stateEl.textContent = '❌ IPC 未连接';
+    logE('statusAPI not available');
+    return;
+  }
+  try {
+    api.toggle();
+    stateEl.textContent = '...';
+  } catch (err) {
+    stateEl.textContent = '❌ ' + err.message;
+    logE('toggle failed', { error: err.message });
+  }
+});
+
+if (!api) {
+  stateEl.textContent = '❌ IPC 未连接';
+  debugEl.textContent = 'window.statusAPI is undefined';
+  logE('statusAPI not available on load');
+} else {
+  logR('statusAPI available');
+  api.onStateChange(setRecording);
+}
+</script>
+</body>
+</html>

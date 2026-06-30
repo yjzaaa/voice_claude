@@ -6,7 +6,7 @@
 // electron-reload: 开发模式自动重载（文件变化时重启 Electron）
 try { require('electron-reload')(__dirname, { electron: require('electron') }); } catch {}
 
-import { app, BrowserWindow, Tray, clipboard, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, Tray, screen, clipboard, nativeImage, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -15,7 +15,7 @@ import { InstanceRegistry } from './instance/registry';
 import { Router } from './instance/router';
 import { logger } from './logger';
 import { transcribe } from './asr';
-import { start as startVosk, isModelAvailable as isVoskModelAvailable } from './asr/vosk';
+import { initRecorder, toggleRecording, isRecorderRecording } from './asr/recorder';
 
 const log = (cmp: string, msg: string, extra?: any) => logger.info(cmp, msg, extra);
 
@@ -30,26 +30,38 @@ const router = new Router(reg);
 
 async function deliver(text: string): Promise<string> {
   if (!text) return 'empty';
-  const { inst, reason } = await router.resolve(text);
-  if (router.isCmd) {
-    if (inst) { platform.focusWindow(inst.hwnd); }
-    return reason;
-  }
+  logger.info('delivery', 'start', { text: text.slice(0, 60) });
+  try {
+    const { inst, reason } = await router.resolve(text);
+    if (router.isCmd) {
+      if (inst) { platform.focusWindow(inst.hwnd); }
+      logger.info('delivery', 'command resolved', { reason });
+      return reason;
+    }
 
-  const start = Date.now();
-  clipboard.writeText(text);
-  if (inst) { platform.focusWindow(inst.hwnd); }
-  await slp(150);
-  platform.sendKeys('ctrl', 'v');
-  await slp(200);
-  platform.sendKeys('enter');
-  const ms = Date.now() - start;
-  logger.delivery(inst?.name || 'foreground', text, ms);
-  return inst?.name || '前台';
+    const start = Date.now();
+    clipboard.writeText(text);
+    if (inst) { platform.focusWindow(inst.hwnd); }
+    await slp(150);
+    platform.sendKeys('ctrl', 'v');
+    await slp(200);
+    platform.sendKeys('enter');
+    const ms = Date.now() - start;
+    logger.delivery(inst?.name || 'foreground', text, ms);
+    logger.info('delivery', 'success', { target: inst?.name || 'foreground', ms });
+    return inst?.name || '前台';
+  } catch (err: any) {
+    logger.error('delivery', 'failed', { error: err.message });
+    return 'error';
+  }
 }
 
 // HTTP
-const PAGE = fs.readFileSync(path.join(__dirname, '..', 'speech.html'), 'utf-8');
+const isDev = !app.isPackaged;
+const statusUrl = isDev
+  ? 'http://localhost:5173/status.html'
+  : path.join(__dirname, 'renderer', 'status.html');
+const PAGE = fs.readFileSync(path.join(__dirname, '..', 'html', 'speech.html'), 'utf-8');
 http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const t0 = Date.now();
@@ -59,12 +71,55 @@ http.createServer((req, res) => {
     res.end(JSON.stringify({ target: router.target || 'terminal', count: reg.list().length, windows: ws }));
     return;
   }
+  if (req.method === 'GET' && (req.url || '').startsWith('/fixtures')) {
+    const fixtureDir = path.join(__dirname, '..', 'test', 'asr', 'fixtures');
+    try { fs.mkdirSync(fixtureDir, { recursive: true }); } catch {}
+    const files = fs.readdirSync(fixtureDir).filter(f=>f.endsWith('.pcm')).map(f=>{
+      const name=f.replace('.pcm','');
+      const txtPath=path.join(fixtureDir,name+'.txt');
+      const txt=fs.existsSync(txtPath)?fs.readFileSync(txtPath,'utf-8').trim():'';
+      return {name,size:fs.statSync(path.join(fixtureDir,f)).size,text:txt};
+    });
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({files}));return;
+  }
+  if (req.method === 'GET' && (req.url || '').startsWith('/fixture-info')) {
+    const q=new URL(req.url||'/','http://localhost').searchParams;
+    const name=q.get('name')||'';
+    const txtPath=path.join(__dirname,'..','test','asr','fixtures',name+'.txt');
+    const pcmPath=path.join(__dirname,'..','test','asr','fixtures',name+'.pcm');
+    const text=fs.existsSync(txtPath)?fs.readFileSync(txtPath,'utf-8').trim():'';
+    const size=fs.existsSync(pcmPath)?fs.statSync(pcmPath).size:0;
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({name,text,size}));return;
+  }
   if (req.method === 'GET' && req.url === '/metrics') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(logger.metricsJSON()));
     return;
   }
   if (req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(PAGE); return; }
+  // 保存录音文件到 fixtures
+  if (req.method === 'POST' && (req.url || '').startsWith('/save-fixture')) {
+    const q = new URL(req.url || '/', 'http://localhost').searchParams;
+    const name = (q.get('name') || 'recording').replace(/[^a-zA-Z0-9_-]/g,'_');
+    const expectedText = q.get('text') || '';
+    const buf: Buffer[] = [];
+    req.on('data', d => buf.push(d as Buffer));
+    req.on('end', () => {
+      const data = Buffer.concat(buf);
+      const fixtureDir = path.join(__dirname, '..', 'test', 'asr', 'fixtures');
+      try { fs.mkdirSync(fixtureDir, { recursive: true }); } catch {}
+      try {
+        fs.writeFileSync(path.join(fixtureDir, name + '.pcm'), data);
+        if (expectedText) fs.writeFileSync(path.join(fixtureDir, name + '.txt'), expectedText, 'utf-8');
+        logger.info('http', 'fixture保存', { name, size: data.length, text: expectedText.slice(0,30) });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, name, size: data.length }));
+      } catch(e: any) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/send') {
     let body = ''; req.on('data', d => body += d);
     req.on('end', async () => {
@@ -121,26 +176,73 @@ const watcher = reg.watch(e => { log('window', `${e.event}: ${e.title.slice(0, 3
 function icon(c: string) { return nativeImage.createFromDataURL(`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="${c}"/></svg>`)}`); }
 
 let win: BrowserWindow | null = null, isQuitting = false;
+let tray: Tray | null = null;
 
 app.whenReady().then(() => {
   logger.info('app', 'ready');
-  win = new BrowserWindow({ width: 400, height: 200, frame: false, transparent: true, resizable: false });
-  win.loadFile(path.join(__dirname, '..', 'status.html'));
+  win = new BrowserWindow({
+    width: 320,
+    height: 160,
+    x: screen.getPrimaryDisplay().workAreaSize.width - 340,
+    y: screen.getPrimaryDisplay().workAreaSize.height - 180,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  if (typeof statusUrl === 'string' && statusUrl.startsWith('http')) {
+    win.loadURL(statusUrl);
+  } else {
+    win.loadFile(statusUrl);
+  }
   win.on('close', e => { if (!isQuitting) { e.preventDefault(); win?.hide(); } });
-  new Tray(icon('#00e676')).on('click', () => win?.isVisible() ? win?.hide() : win?.show());
+  tray = new Tray(icon(isRecorderRecording() ? '#e94560' : '#00e676'));
+  tray.setToolTip('voice_claude - 点击切换录音');
+  tray.on('click', () => toggleRecording());
   win.show();
 
-  // Start Vosk ASR as primary recognition (hidden BrowserWindow with vosk-browser WASM)
-  if (isVoskModelAvailable()) {
-    logger.info('vosk', 'starting Vosk ASR');
-    startVosk((text: string) => {
-      logger.info('vosk', 'recognized', { text: text.slice(0, 60) });
-      deliver(text);
-    });
-  } else {
-    logger.info('vosk', 'model not found — Vosk ASR disabled');
-    logger.info('vosk', 'place vosk-model-small-cn-0.22.tar.gz in models/ directory');
-  }
+  // Init Doubao voice recorder (hidden window)
+  initRecorder({
+    onPcm: async (pcm: Buffer) => {
+      logger.info('asr', 'doubao transcribe started', { bytes: pcm.length });
+      try {
+        const text = await transcribe(pcm, { sampleRate: 16000 });
+        if (text) {
+          logger.info('asr', 'doubao transcribe success', { text: text.slice(0, 60) });
+          deliver(text);
+        } else {
+          logger.warn('asr', 'doubao transcribe returned empty');
+        }
+      } catch (err: any) {
+        logger.error('asr', 'doubao transcribe failed', { error: err.message });
+      }
+    },
+    onStateChange: (recording: boolean) => {
+      logger.info('app', 'recording state broadcast', { recording });
+      win?.webContents.send('status:state', recording);
+      tray?.setImage(icon(recording ? '#e94560' : '#00e676'));
+      tray?.setToolTip(recording ? 'voice_claude - 录音中，点击停止' : 'voice_claude - 点击开始录音');
+    },
+  });
+
+  // Status window button toggles recording
+  ipcMain.on('status:toggle', () => {
+    logger.info('app', 'status toggle received');
+    toggleRecording();
+  });
+
+  // Renderer log bridge
+  ipcMain.on('renderer:log', (_event, level: string, cmp: string, msg: string, extra?: any) => {
+    if (level === 'error') logger.error(cmp, msg, extra);
+    else if (level === 'warn') logger.warn(cmp, msg, extra);
+    else logger.info(cmp, msg, extra);
+  });
 });
 
 app.on('window-all-closed', () => {});
