@@ -120,7 +120,7 @@ test('T1.8: Empty window list → resolve() does not throw', async () => {
 });
 
 // ── T1.9: Switch command match ─────────────────────────────────
-test('T1.9: 切换到 terminal-2 → target changes to terminal-2', async () => {
+test('T1.9: 切到 terminal-2 → target changes to terminal-2', async () => {
   const windows = [
     makeInst('terminal', 111, '✳ 修复bug', '修复bug', ['bug']),
     makeInst('terminal-2', 222, 'claude', 'claude', []),
@@ -128,7 +128,7 @@ test('T1.9: 切换到 terminal-2 → target changes to terminal-2', async () => 
   const reg = createMockRegistry(windows);
   const router = new Router(reg);
 
-  const result = await router.resolve('切换到 terminal-2');
+  const result = await router.resolve('切到 terminal-2');
 
   expect(result.reason).toBe('切→terminal-2');
   expect(result.inst?.name).toBe('terminal-2');
