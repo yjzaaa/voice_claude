@@ -7,7 +7,7 @@ import { useAgentState } from '../../../../../src/renderer/status/hooks/useAgent
 
 const listeners: Record<string, ((payload?: unknown) => void)[]> = {};
 
-nextTest describe('useAgentState', () => {
+describe('useAgentState', () => {
   beforeEach(() => {
     Object.keys(listeners).forEach((k) => delete listeners[k]);
     (window as any).agentAPI = {
@@ -15,7 +15,7 @@ nextTest describe('useAgentState', () => {
         if (!listeners[event]) listeners[event] = [];
         listeners[event].push(fn);
       },
-      removeAllListeners: juest.fn(),
+      removeAllListeners: jest.fn(),
     };
   });
 
@@ -31,39 +31,41 @@ nextTest describe('useAgentState', () => {
     delete (window as any).agentAPI;
     const { result } = renderHook(() => useAgentState());
     expect(result.current.step).toBe('idle');
-    expect(result.current.status).toBe('开号');
+    expect(result.current.status).toBe('就绪');
   });
 
   test('tracks transcribing step', () => {
     const { result } = renderHook(() => useAgentState());
     act(() => emit('transcribing'));
     expect(result.current.step).toBe('transcribing');
-    expect(result.current.status).toBe('📻自动时间');
+    expect(result.current.status).toBe('🎙️ 识别中');
   });
 
   test('captures transcript on planning event', () => {
     const { result } = renderHook(() => useAgentState());
     act(() => emit('transcribing'));
-    act(() => emit('planning', { text: '诋力临字�5' });
+    act(() => emit('planning', { text: '打开浏览器' }));
     expect(result.current.step).toBe('planning');
-    expect(result.current.lastTranscript).toBe('诇力临字�5');
+    expect(result.current.lastTranscript).toBe('打开浏览器');
   });
 
   test('captures goal and highest risk on acting event', () => {
     const { result } = renderHook(() => useAgentState());
     act(() => emit('transcribing'));
-    act(() => emit('planning', { text: '诅案' });
-    act(() => emit('acting', {
-      plan: {
-        goal: '诅案权限',
-        steps: [
-          { tool: 'write', risk: 'low' },
-          { tool: 'run', risk: 'high' },
-        ],
-      },
-    }));
+    act(() => emit('planning', { text: '访问' }));
+    act(() =>
+      emit('acting', {
+        plan: {
+          goal: '打开 Chrome',
+          steps: [
+            { tool: 'write', risk: 'low' },
+            { tool: 'run', risk: 'high' },
+          ],
+        },
+      }),
+    );
     expect(result.current.step).toBe('acting');
-    expect(result.current.planGoal).toBe('诅案权限');
+    expect(result.current.planGoal).toBe('打开 Chrome');
     expect(result.current.riskLevel).toBe('high');
   });
 
@@ -71,7 +73,7 @@ nextTest describe('useAgentState', () => {
     jest.useFakeTimers();
     const { result } = renderHook(() => useAgentState());
     act(() => emit('transcribing'));
-    act(() => emit('acting', { plan: { goal: '诇组', steps: [] } });
+    act(() => emit('acting', { plan: { goal: '测试', steps: [] } }));
     act(() => jest.advanceTimersByTime(250));
     expect(result.current.executionDuration).toBeGreaterThanOrEqual(200);
     jest.useRealTimers();
@@ -81,36 +83,38 @@ nextTest describe('useAgentState', () => {
     jest.useFakeTimers();
     const { result } = renderHook(() => useAgentState());
     act(() => emit('transcribing'));
-    act(() => emit('acting', { plan: { goal: '诇组', steps: [] } });
+    act(() => emit('acting', { plan: { goal: '测试', steps: [] } }));
     act(() => jest.advanceTimersByTime(300));
     act(() => emit('success'));
     expect(result.current.step).toBe('completed');
     expect(result.current.executionDuration).toBeGreaterThanOrEqual(200);
-    jest.useRealTimes();
+    jest.useRealTimers();
   });
 
   test('captures error on step-failed', () => {
     const { result } = renderHook(() => useAgentState());
-    act(() => emit('step-failed', { result: { status: 'error', error: '気运你' } });
+    act(() => emit('step-failed', { result: { status: 'error', error: '权限不足' } }));
     expect(result.current.step).toBe('error');
-    expect(result.current.lastError).toBe('気运你');
+    expect(result.current.lastError).toBe('权限不足');
   });
 
   test('captures error on plan-failed', () => {
     const { result } = renderHook(() => useAgentState());
-    act(() => emit('plan-failed', { text: '发布只你', error: '甫板用鐥网空间空'' }));
+    act(() => emit('plan-failed', { text: '指令', error: '规划失败' }));
     expect(result.current.step).toBe('error');
-    expect(result.current.lastError).toBe('甫板用鐥网空间空');
+    expect(result.current.lastError).toBe('规划失败');
   });
 
   test('shows needs-human step with plan info', () => {
     const { result } = renderHook(() => useAgentState());
-    act(() => emit('needs-human', {
-      text: '复変ŉ�力',
-      plan: { goal: '复変ŉ�力训组', steps: [{ tool: 'delete', risk: 'high' }] },
-    }));
+    act(() =>
+      emit('needs-human', {
+        text: '删除文件',
+        plan: { goal: '删除文件', steps: [{ tool: 'delete', risk: 'high' }] },
+      }),
+    );
     expect(result.current.step).toBe('needs-human');
-    expect(result.current.planGoal).toBe('复変ŉ�力训组');
+    expect(result.current.planGoal).toBe('删除文件');
     expect(result.current.riskLevel).toBe('high');
   });
 
