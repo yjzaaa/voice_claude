@@ -25,3 +25,25 @@ jobs:
 
       - name: Run CI
         run: npm run ci
+
+  e2e:
+    runs-on: windows-latest
+    needs: ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run E2E smoke tests
+        run: npm run test:e2e

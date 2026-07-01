@@ -9,6 +9,8 @@ export interface Skill {
   patterns: string[];
   /** 触发后应执行的计划 */
   plan: Plan;
+  /** 是否启用；默认 true */
+  enabled?: boolean;
 }
 
 /** 技能匹配结果。 */
@@ -54,7 +56,7 @@ export class SkillRegistry {
         const raw = this.fs.readFileSync(path.join(this.skillsDir, file), 'utf-8');
         const skill = JSON.parse(raw) as Skill;
         if (skill.name && Array.isArray(skill.patterns) && skill.plan) {
-          this.skills.push(skill);
+          this.skills.push({ enabled: true, ...skill });
         }
       } catch {
         // 跳过格式损坏的技能文件，避免一个坏文件导致全部不可用
@@ -62,13 +64,61 @@ export class SkillRegistry {
     }
   }
 
+  /** 重新加载技能文件；可用于文件变更后的热重载。 */
+  reload(): void {
+    this.load();
+  }
+
   /**
-   * 尝试用文本匹配已加载的技能。
+   * 获取当前已加载的技能列表（含启用状态）。
+   * 返回浅拷贝，避免外部直接修改内部数组。
+   */
+  getSkills(): Skill[] {
+    return this.skills.map((s) => ({ ...s }));
+  }
+
+  /**
+   * 启用指定技能。
+   * @param name - 技能名称
+   * @returns 是否找到并启用该技能
+   */
+  enable(name: string): boolean {
+    const skill = this.skills.find((s) => s.name === name);
+    if (!skill) return false;
+    skill.enabled = true;
+    return true;
+  }
+
+  /**
+   * 禁用指定技能；禁用后 match() 不再命中该技能。
+   * @param name - 技能名称
+   * @returns 是否找到并禁用该技能
+   */
+  disable(name: string): boolean {
+    const skill = this.skills.find((s) => s.name === name);
+    if (!skill) return false;
+    skill.enabled = false;
+    return true;
+  }
+
+  /**
+   * 查询指定技能是否启用。
+   * @param name - 技能名称
+   */
+  isEnabled(name: string): boolean {
+    const found = this.skills.find((s) => s.name === name);
+    if (!found) return false;
+    return found.enabled !== false;
+  }
+
+  /**
+   * 尝试用文本匹配已加载且启用的技能。
    * @param text - ASR 识别后的用户文本
    * @returns 匹配结果；无匹配时返回 undefined
    */
   match(text: string): SkillMatch | undefined {
     for (const skill of this.skills) {
+      if (skill.enabled === false) continue;
       for (const pattern of skill.patterns) {
         if (text.includes(pattern)) {
           return { skill: skill.name, plan: skill.plan };

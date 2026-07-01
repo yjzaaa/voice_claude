@@ -55,17 +55,25 @@ contextBridge.exposeInMainWorld('recorderAPI', {
   sendPcm: (buffer: ArrayBuffer) => ipcRenderer.send('recorder:pcm', buffer),
   onStart: (fn: () => void) => ipcRenderer.on('recorder:start', fn),
   onStop: (fn: () => void) => ipcRenderer.on('recorder:stop', fn),
+  onConfig: (fn: (payload: { vad: Record<string, number> }) => void) =>
+    ipcRenderer.on('recorder:config', (_e, payload) => fn(payload)),
   removeAllListeners: () => {
     ipcRenderer.removeAllListeners('recorder:start');
     ipcRenderer.removeAllListeners('recorder:stop');
+    ipcRenderer.removeAllListeners('recorder:config');
   },
 });
 
 contextBridge.exposeInMainWorld('statusAPI', {
-  toggle: () => ipcRenderer.send('status:toggle'),
+  toggle: () => ipcRenderer.invoke('status:toggle'),
   onStateChange: (fn: (recording: boolean) => void) =>
     ipcRenderer.on('status:state', (_e, recording) => fn(recording)),
-  removeAllListeners: () => ipcRenderer.removeAllListeners('status:state'),
+  onRecorderReadyStateChange: (fn: (ready: boolean) => void) =>
+    ipcRenderer.on('recorder:ready-state', (_e, ready) => fn(ready)),
+  removeAllListeners: () => {
+    ipcRenderer.removeAllListeners('status:state');
+    ipcRenderer.removeAllListeners('recorder:ready-state');
+  },
 });
 
 contextBridge.exposeInMainWorld('loggerAPI', {
@@ -81,4 +89,8 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   addRiskWhitelist: (tool: string) => ipcRenderer.invoke('settings:addRiskWhitelist', tool),
   removeRiskWhitelist: (tool: string) => ipcRenderer.invoke('settings:removeRiskWhitelist', tool),
   getRecentActions: () => ipcRenderer.invoke('settings:getRecentActions'),
+  getSkills: () => ipcRenderer.invoke('settings:getSkills'),
+  setSkillEnabled: (name: string, enabled: boolean) =>
+    ipcRenderer.invoke('settings:setSkillEnabled', name, enabled),
+  reloadSkills: () => ipcRenderer.invoke('settings:reloadSkills'),
 });

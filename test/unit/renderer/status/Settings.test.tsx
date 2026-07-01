@@ -15,6 +15,12 @@ describe('Settings', () => {
     addRiskWhitelist: jest.fn().mockResolvedValue(undefined),
     removeRiskWhitelist: jest.fn().mockResolvedValue(undefined),
     getRecentActions: jest.fn().mockResolvedValue(['success: open code']),
+    getSkills: jest.fn().mockResolvedValue([
+      { name: 'open-claude', patterns: ['打开 Claude'], enabled: true },
+      { name: 'send-hello', patterns: ['发送你好'], enabled: false },
+    ]),
+    setSkillEnabled: jest.fn().mockResolvedValue(undefined),
+    reloadSkills: jest.fn().mockResolvedValue(undefined),
   });
 
   let mockAPI: ReturnType<typeof createMockAPI>;
@@ -36,9 +42,12 @@ describe('Settings', () => {
     expect(screen.getByDisplayValue('google')).toBeInTheDocument();
     expect(screen.getByText('send_text')).toBeInTheDocument();
     expect(screen.getByText('success: open code')).toBeInTheDocument();
+    expect(screen.getByText('open-claude')).toBeInTheDocument();
+    expect(screen.getByText('send-hello')).toBeInTheDocument();
     expect(mockAPI.getPreferences).toHaveBeenCalled();
     expect(mockAPI.getRiskWhitelist).toHaveBeenCalled();
     expect(mockAPI.getRecentActions).toHaveBeenCalled();
+    expect(mockAPI.getSkills).toHaveBeenCalled();
   });
 
   test('shows error when settings API is unavailable', async () => {
@@ -90,5 +99,24 @@ describe('Settings', () => {
 
     fireEvent.click(screen.getByText('← 返回'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  test('toggles a skill when checkbox is clicked', async () => {
+    render(<Settings onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByText('open-claude')).toBeInTheDocument());
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(2);
+
+    fireEvent.click(checkboxes[1]);
+    await waitFor(() => expect(mockAPI.setSkillEnabled).toHaveBeenCalledWith('send-hello', true));
+  });
+
+  test('reloads skills when reload button is clicked', async () => {
+    render(<Settings onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByText('语音技能')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('重载'));
+    await waitFor(() => expect(mockAPI.reloadSkills).toHaveBeenCalled());
   });
 });

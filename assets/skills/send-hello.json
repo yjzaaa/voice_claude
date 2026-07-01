@@ -1,0 +1,15 @@
+{
+  "name": "send-hello",
+  "patterns": ["发送你好", "发你好", "发送 你好"],
+  "enabled": true,
+  "plan": {
+    "goal": "向当前窗口发送“你好”",
+    "steps": [
+      {
+        "tool": "send_text",
+        "params": { "text": "你好" },
+        "reason": "在当前聚焦窗口输入问候语"
+      }
+    ]
+  }
+}

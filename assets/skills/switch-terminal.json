@@ -1,0 +1,15 @@
+{
+  "name": "switch-terminal",
+  "patterns": ["切换到 terminal", "切换到终端", "打开 terminal", "打开终端"],
+  "enabled": true,
+  "plan": {
+    "goal": "聚焦到 terminal 窗口",
+    "steps": [
+      {
+        "tool": "focus_window",
+        "params": { "title": "terminal" },
+        "reason": "聚焦到标题包含 terminal 的窗口"
+      }
+    ]
+  }
+}

@@ -42,6 +42,8 @@ async function main(): Promise<void> {
     riskClassifier,
     planExecutor,
     auditLogger,
+    config,
+    skillRegistry,
   } = services;
 
   // 全局异常兜底：记录并安全退出
@@ -267,27 +269,61 @@ async function main(): Promise<void> {
     ipcMain.handle('settings:getRecentActions', async () => {
       return (await memoryStore.get<string[]>('recentActions')) ?? [];
     });
+    ipcMain.handle('settings:getSkills', async () => {
+      return skillRegistry.getSkills().map(({ name, patterns, enabled }) => ({
+        name,
+        patterns,
+        enabled,
+      }));
+    });
+    ipcMain.handle('settings:setSkillEnabled', async (_event, name: string, enabled: boolean) => {
+      if (enabled) {
+        skillRegistry.enable(name);
+      } else {
+        skillRegistry.disable(name);
+      }
+      const disabled = skillRegistry
+        .getSkills()
+        .filter((s) => !s.enabled)
+        .map((s) => s.name);
+      await memoryStore.set('disabledSkills', disabled);
+    });
+    ipcMain.handle('settings:reloadSkills', async () => {
+      skillRegistry.reload();
+      const disabled = (await memoryStore.get<string[]>('disabledSkills')) ?? [];
+      for (const name of disabled) {
+        skillRegistry.disable(name);
+      }
+    });
 
     // 初始化录音器：VAD 自动分段，每段交给 agent
-    initRecorder({
-      onPcm: async (pcm: Buffer) => {
-        logger.info('recorder', 'pcm segment', { bytes: pcm.length });
-        try {
-          await voiceAgent.onPcm(pcm);
-        } catch (err: any) {
-          logger.error('voiceAgent', 'onPcm failed', { error: err.message });
-        }
-        // 短暂停顿后继续监听下一段语音
-        setTimeout(() => {
-          if (!isQuitting) startRecording();
-        }, 300);
+    initRecorder(
+      {
+        onPcm: async (pcm: Buffer) => {
+          logger.info('recorder', 'pcm segment', { bytes: pcm.length });
+          try {
+            await voiceAgent.onPcm(pcm);
+          } catch (err: any) {
+            logger.error('voiceAgent', 'onPcm failed', { error: err.message });
+          }
+          // 短暂停顿后继续监听下一段语音
+          setTimeout(() => {
+            if (!isQuitting) startRecording();
+          }, 300);
+        },
+        onStateChange: (recording: boolean) => {
+          logger.info('recorder', 'state', { recording });
+          win?.webContents.send('status:state', recording);
+          updateTray(recording);
+        },
       },
-      onStateChange: (recording: boolean) => {
-        logger.info('recorder', 'state', { recording });
-        win?.webContents.send('status:state', recording);
-        updateTray(recording);
+      {
+        vad: config.asr.vad,
+        onReadyStateChange: (ready: boolean) => {
+          win?.webContents.send('recorder:ready-state', ready);
+        },
       },
-    });
+    );
 
     win.show();
 

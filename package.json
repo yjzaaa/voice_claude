@@ -14,6 +14,8 @@
     "test:unit": "jest --testPathPatterns='test/unit' --testTimeout=30000 --runInBand",
     "test:all": "jest --testPathPatterns='test/' --testTimeout=30000",
     "test": "jest --testPathPatterns='test/unit' --testTimeout=30000 --runInBand",
+    "test:e2e": "playwright test",
+    "test:e2e:perf": "ts-node scripts/e2e-perf.ts",
     "lint": "eslint src test --ext .ts,.tsx",
     "lint:fix": "eslint src test --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"test/**/*.{ts,tsx}\"",

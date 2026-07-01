@@ -16,7 +16,7 @@ export interface AuditEntry {
   };
   /** 计划执行结果 */
   executionResult: {
-    status: 'success' | 'step-failed';
+    status: 'success' | 'step-failed' | 'error';
     failedStep?: { tool: string; params: unknown; risk?: string };
     error?: string;
   };

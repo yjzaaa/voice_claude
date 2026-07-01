@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getSettingsAPI } from '../shared/api';
+import { getSettingsAPI, SkillInfo } from '../shared/api';
 import styles from './Settings.module.css';
 
 /** 设置页属性。 */
@@ -16,6 +16,8 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [preferences, setPreferences] = useState<Record<string, unknown>>({});
   const [whitelist, setWhitelist] = useState<string[]>([]);
   const [recentActions, setRecentActions] = useState<string[]>([]);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [reloadingSkills, setReloadingSkills] = useState(false);
   const [newTool, setNewTool] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,14 +31,16 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
     }
     setLoading(true);
     try {
-      const [prefs, list, actions] = await Promise.all([
+      const [prefs, list, actions, skillList] = await Promise.all([
         api.getPreferences(),
         api.getRiskWhitelist(),
         api.getRecentActions(),
+        api.getSkills(),
       ]);
       setPreferences(prefs);
       setWhitelist(list);
       setRecentActions(actions);
+      setSkills(skillList);
       setError(null);
     } catch (err: any) {
       setError(err.message ?? '加载失败');
@@ -81,6 +85,30 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
     if (!api) return;
     await api.removeRiskWhitelist(tool);
     await load();
+  };
+
+  const toggleSkill = async (name: string, enabled: boolean) => {
+    if (!api) return;
+    setSkills((prev) => prev.map((s) => (s.name === name ? { ...s, enabled } : s)));
+    try {
+      await api.setSkillEnabled(name, enabled);
+    } catch (err: any) {
+      setError(err.message ?? '切换技能失败');
+      await load();
+    }
+  };
+
+  const reloadSkills = async () => {
+    if (!api) return;
+    setReloadingSkills(true);
+    try {
+      await api.reloadSkills();
+      await load();
+    } catch (err: any) {
+      setError(err.message ?? '重载技能失败');
+    } finally {
+      setReloadingSkills(false);
+    }
   };
 
   if (loading) {
@@ -168,6 +196,31 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
             </li>
           ))}
           {recentActions.length === 0 && <li className={styles.empty}>暂无记录</li>}
+        </ul>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.skillsHeader}>
+          <h3>语音技能</h3>
+          <button className={styles.reloadButton} onClick={reloadSkills} disabled={reloadingSkills}>
+            {reloadingSkills ? '重载中...' : '重载'}
+          </button>
+        </div>
+        <ul className={styles.list}>
+          {skills.map((skill) => (
+            <li key={skill.name} className={styles.listItem}>
+              <label className={styles.skillRow}>
+                <input
+                  type="checkbox"
+                  checked={skill.enabled}
+                  onChange={(e) => toggleSkill(skill.name, e.target.checked)}
+                />
+                <span className={styles.skillName}>{skill.name}</span>
+                <span className={styles.skillPatterns}>{skill.patterns.join(' / ')}</span>
+              </label>
+            </li>
+          ))}
+          {skills.length === 0 && <li className={styles.empty}>暂无技能</li>}
         </ul>
       </section>
     </div>

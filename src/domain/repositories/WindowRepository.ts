@@ -1,4 +1,4 @@
-import { WindowManager } from '../../ports/incoming/WindowManager';
+import { WindowInfo, WindowManager, WindowRole } from '../../ports/incoming/WindowManager';
 import { EventBus } from '../../application/events/EventBus';
 
 /**
@@ -7,6 +7,10 @@ import { EventBus } from '../../application/events/EventBus';
 export interface TrackedWindow {
   id: number;
   title: string;
+  processName?: string;
+  appName?: string;
+  iconPath?: string | null;
+  role?: WindowRole;
 }
 
 /**
@@ -27,7 +31,8 @@ export class WindowRepository {
 
   /** 重新扫描桌面窗口并更新内部状态。 */
   scan(): void {
-    this.windows = this.windowManager.findWindows();
+    const found = this.windowManager.findWindows();
+    this.windows = dedupWindows(found.map(adaptWindow));
     this.activeWindowId = this.windowManager.getActiveWindow();
     this.eventBus.emit('window:scan', { windows: this.windows, active: this.activeWindowId });
   }
@@ -46,4 +51,31 @@ export class WindowRepository {
   getWindowTitle(id: number): string | undefined {
     return this.windows.find((w) => w.id === id)?.title;
   }
+
+  /** 获取指定 ID 窗口的完整信息。 */
+  getWindowById(id: number): TrackedWindow | undefined {
+    return this.windows.find((w) => w.id === id);
+  }
+}
+
+function adaptWindow(info: WindowInfo): TrackedWindow {
+  return {
+    id: info.id,
+    title: info.title,
+    processName: info.processName,
+    appName: info.appName,
+    iconPath: info.iconPath,
+    role: info.role,
+  };
+}
+
+function dedupWindows(windows: TrackedWindow[]): TrackedWindow[] {
+  const seen = new Set<number>();
+  const result: TrackedWindow[] = [];
+  for (const w of windows) {
+    if (seen.has(w.id)) continue;
+    seen.add(w.id);
+    result.push(w);
+  }
+  return result;
 }

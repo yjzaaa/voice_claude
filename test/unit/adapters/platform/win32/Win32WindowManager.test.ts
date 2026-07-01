@@ -14,7 +14,9 @@ describe('Win32WindowManager', () => {
 
     const execSync = (command: string, options?: any) => {
       execCalls.push({ command, options });
-      if (command.includes('find_win.py')) return '101|Claude Dev\n102|terminal-2\n';
+      if (command.includes('find_win.py')) {
+        return '101|Claude Dev|Claude|C:\\Claude\\Claude.exe\n102|terminal-2|WindowsTerminal|C:\\wt.exe\n';
+      }
       if (command.includes('focus_win.py')) return '';
       if (command.includes('kill_win.py')) return '';
       if (command.includes('GetForegroundWindow')) return '101';
@@ -48,14 +50,46 @@ describe('Win32WindowManager', () => {
     });
   });
 
-  test('findWindows parses Python script output', () => {
+  test('findWindows parses enhanced Python script output', () => {
     const windows = manager.findWindows();
     expect(windows).toEqual([
-      { id: 101, title: 'Claude Dev' },
-      { id: 102, title: 'terminal-2' },
+      {
+        id: 101,
+        title: 'Claude Dev',
+        processName: 'Claude',
+        appName: 'Claude',
+        iconPath: 'C:\\Claude\\Claude.exe',
+        role: 'assistant',
+      },
+      {
+        id: 102,
+        title: 'terminal-2',
+        processName: 'WindowsTerminal',
+        appName: 'WindowsTerminal',
+        iconPath: 'C:\\wt.exe',
+        role: 'terminal',
+      },
     ]);
     expect(execCalls[0].command).toContain('py.exe');
     expect(execCalls[0].command).toContain('find_win.py');
+  });
+
+  test('findWindows falls back to title inference when process name missing', () => {
+    const managerWithSparseOutput = new Win32WindowManager({
+      pythonExecutable: 'py.exe',
+      scriptRoot: '/scripts',
+      execSync: (command: string) => {
+        if (command.includes('find_win.py')) {
+          return '103|Claude Code Editor||\n';
+        }
+        return '';
+      },
+      spawn: () => fakeProcess as any,
+    });
+    const windows = managerWithSparseOutput.findWindows();
+    expect(windows[0].processName).toBe('claude');
+    expect(windows[0].appName).toBe('claude');
+    expect(windows[0].role).toBe('assistant');
   });
 
   test('findWindows returns empty array on failure', () => {

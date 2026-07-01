@@ -137,6 +137,50 @@
   padding: 4px 0;
 }
 
+.skillsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.skillsHeader h3 {
+  margin: 0;
+}
+
+.reloadButton {
+  padding: 4px 10px;
+  font-size: 0.8em;
+  background: #2196f3;
+  color: #fff;
+}
+
+.reloadButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.skillRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.skillName {
+  font-weight: 500;
+  min-width: 120px;
+}
+
+.skillPatterns {
+  color: #888;
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .error {
   color: #e94560;
   font-size: 0.9em;

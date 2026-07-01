@@ -26,13 +26,29 @@ export interface PermissionAPI {
 }
 
 export interface StatusAPI {
-  toggle(): void;
+  toggle(): Promise<void>;
   onStateChange(fn: (recording: boolean) => void): void;
+  onRecorderReadyStateChange(fn: (ready: boolean) => void): void;
+  removeAllListeners(): void;
+}
+
+export interface RecorderAPI {
+  ready(): void;
+  sendPcm(buffer: ArrayBuffer): void;
+  onStart(fn: () => void): void;
+  onStop(fn: () => void): void;
+  onConfig(fn: (payload: { vad: Record<string, number> }) => void): void;
   removeAllListeners(): void;
 }
 
 export interface LoggerAPI {
   log(level: string, cmp: string, msg: string, extra?: unknown): void;
+}
+
+export interface SkillInfo {
+  name: string;
+  patterns: string[];
+  enabled: boolean;
 }
 
 export interface SettingsAPI {
@@ -42,6 +58,9 @@ export interface SettingsAPI {
   addRiskWhitelist(tool: string): Promise<void>;
   removeRiskWhitelist(tool: string): Promise<void>;
   getRecentActions(): Promise<string[]>;
+  getSkills(): Promise<SkillInfo[]>;
+  setSkillEnabled(name: string, enabled: boolean): Promise<void>;
+  reloadSkills(): Promise<void>;
 }
 
 declare global {

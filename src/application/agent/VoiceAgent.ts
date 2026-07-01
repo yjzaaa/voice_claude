@@ -53,7 +53,7 @@ export class VoiceAgent {
    */
   async onPcm(pcm: Buffer): Promise<void> {
     this.eventBus.emit('agent:transcribing');
-    const text = await this.asr.transcribe(pcm, this.config.sampleRate ?? 16000);
+    const text = await this.transcribeWithRetry(pcm, this.config.sampleRate ?? 16000);
 
     // 空识别直接忽略，避免对无意义音频继续处理
     if (!text) {
@@ -119,6 +119,37 @@ export class VoiceAgent {
     }
 
     this.audit.log(this.makeAuditEntry(text, response, result));
+  }
+
+  /** 调用 ASR 识别，失败时自动重试一次。 */
+  private async transcribeWithRetry(audio: Buffer, sampleRate: number): Promise<string | null> {
+    try {
+      return await this.asr.transcribe(audio, sampleRate);
+    } catch (firstError) {
+      this.audit.log({
+        timestamp: Date.now(),
+        triggerText: '',
+        response: { isCommand: false, confidence: 0, reason: 'asr first attempt failed' },
+        executionResult: {
+          status: 'error',
+          error: firstError instanceof Error ? firstError.message : String(firstError),
+        },
+      });
+
+      try {
+        return await this.asr.transcribe(audio, sampleRate);
+      } catch (secondError) {
+        const reason = secondError instanceof Error ? secondError.message : String(secondError);
+        this.eventBus.emit('agent:asr-failed', { error: reason });
+        this.audit.log({
+          timestamp: Date.now(),
+          triggerText: '',
+          response: { isCommand: false, confidence: 0, reason: 'asr retry failed' },
+          executionResult: { status: 'error', error: reason },
+        });
+        return null;
+      }
+    }
   }
 
   /** 生成审计条目。 */

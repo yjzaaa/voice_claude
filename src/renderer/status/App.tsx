@@ -9,7 +9,7 @@ import { Settings } from './Settings';
 import styles from './App.module.css';
 
 export const App: React.FC = () => {
-  const { recording, error, toggle } = useRecordingState();
+  const { recording, ready, error, toggle } = useRecordingState();
   const [view, setView] = useState<'status' | 'settings'>('status');
 
   if (view === 'settings') {
@@ -32,7 +32,7 @@ export const App: React.FC = () => {
       <p className={[styles.state, error ? styles.stateError : ''].join(' ')}>
         {error ? `❌ ${error}` : recording ? '🔴 录音中...' : '就绪'}
       </p>
-      <StatusButton recording={recording} onClick={toggle} />
+      <StatusButton recording={recording} ready={ready} onClick={toggle} />
       <DebugPanel recording={recording} />
       <AgentStatus />
       <PermissionRequest />

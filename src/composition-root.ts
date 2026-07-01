@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { execSync, spawn } from 'child_process';
 import { EventBus, EventPayload } from './application/events/EventBus';
 import { FileLogger } from './infrastructure/logging/FileLogger';
@@ -40,6 +41,7 @@ import { JsonFileMemoryStore } from './infrastructure/persistence/JsonFileMemory
 import { AuditLogger } from './ports/outgoing/AuditLogger';
 import { FileAuditLogger } from './infrastructure/audit/FileAuditLogger';
 import { SkillRegistry } from './domain/services/SkillRegistry';
+import { syncDefaultSkills } from './infrastructure/skills/syncDefaultSkills';
 import { WindowRepository } from './domain/repositories/WindowRepository';
 import { AgentPlannerContext } from './domain/services/AgentPlanner';
 import { CronScheduler } from './infrastructure/scheduler/CronScheduler';
@@ -144,6 +146,16 @@ export function createApp(): AppServices {
       backend: envConfig.asr.backend || fileConfig.asr.backend,
       language: envConfig.asr.language || fileConfig.asr.language,
       sampleRate: envConfig.asr.sampleRate || fileConfig.asr.sampleRate,
+      vad: {
+        silenceThreshold:
+          envConfig.asr.vad?.silenceThreshold ?? fileConfig.asr.vad?.silenceThreshold ?? 500,
+        minSpeechDurationMs:
+          envConfig.asr.vad?.minSpeechDurationMs ?? fileConfig.asr.vad?.minSpeechDurationMs ?? 400,
+        maxSpeechDurationMs:
+          envConfig.asr.vad?.maxSpeechDurationMs ??
+          fileConfig.asr.vad?.maxSpeechDurationMs ??
+          30000,
+      },
     },
     llm: {
       apiKey: envConfig.llm.apiKey || fileConfig.llm.apiKey,
@@ -206,7 +218,11 @@ export function createApp(): AppServices {
   const planExecutor = new PlanExecutor(toolRegistry, 3);
 
   const projectRoot = process.cwd();
-  const skillRegistry = new SkillRegistry(path.join(projectRoot, '.voice_claude', 'skills'), fs);
+  const defaultsDir = path.join(projectRoot, 'assets', 'skills');
+  const userSkillsDir = path.join(os.homedir(), '.voice_claude', 'skills');
+  syncDefaultSkills(defaultsDir, userSkillsDir, fs);
+
+  const skillRegistry = new SkillRegistry(userSkillsDir, fs);
   skillRegistry.load();
   const agentPlanner = new AgentPlanner(llmClient, toolRegistry, skillRegistry);
 
@@ -219,6 +235,13 @@ export function createApp(): AppServices {
     path.join(projectRoot, '.voice_claude.memory.json'),
     fs,
   );
+  memoryStore.get<string[]>('disabledSkills').then((disabled) => {
+    if (disabled) {
+      for (const name of disabled) {
+        skillRegistry.disable(name);
+      }
+    }
+  });
   const auditLogger = new FileAuditLogger(path.join(projectRoot, 'logs', 'audit.jsonl'), fs);
 
   const getContext = async (): Promise<AgentPlannerContext> => {
@@ -227,16 +250,28 @@ export function createApp(): AppServices {
       memoryStore.get<string[]>('recentActions'),
       memoryStore.get<string[]>('riskWhitelist'),
     ]);
-    const windows = windowRepository
-      .getWindows()
-      .map((w) => ({ id: String(w.id), title: w.title }));
+    const windows = windowRepository.getWindows().map((w) => ({
+      id: String(w.id),
+      title: w.title,
+      processName: w.processName,
+      appName: w.appName,
+      iconPath: w.iconPath,
+      role: w.role,
+    }));
     const activeId = windowRepository.getActiveWindowId();
-    const activeWindow = activeId
-      ? { id: String(activeId), title: windowRepository.getWindowTitle(activeId) || '' }
-      : undefined;
+    const activeWindow = activeId ? windowRepository.getWindowById(activeId) : undefined;
     return {
       windows,
-      activeWindow,
+      activeWindow: activeWindow
+        ? {
+            id: String(activeWindow.id),
+            title: activeWindow.title,
+            processName: activeWindow.processName,
+            appName: activeWindow.appName,
+            iconPath: activeWindow.iconPath,
+            role: activeWindow.role,
+          }
+        : undefined,
       recentActions: recentActions ?? [],
       preferences: preferences ?? {},
       riskWhitelist: riskWhitelist ?? [],

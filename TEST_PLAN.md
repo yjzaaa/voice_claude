@@ -157,12 +157,55 @@ Word Error Rate (WER) < 20% → 通过
 噪音输入 → 必须返回 null 或空字符串
 ```
 
+## L6: Electron E2E 冒烟测试 (无需语音, 需要 Electron)
+
+使用 Playwright 启动 Electron 应用，验证状态页、设置页、录音状态与 Agent 状态UI。
+
+| # | 测试 | 验证 |
+|---|------|------|
+| T6.1 | 状态页加载 | 窗口显示 `voice_claude` 与 `就绪` |
+| T6.2 | 设置页导航 | 点击设置按钮进入设置页，显示偏好设置与白名单 |
+| T6.3 | 返回状态页 | 点击返回按钮回到状态页 |
+| T6.4 | 录音状态切换 | 模拟 `status:state` 事件，UI 显示 `录音中...` / `就绪` |
+| T6.5 | 模拟 ASR 触发 Agent 状态 | 模拟 `agent:transcribing/planning/acting/success`，UI 依次显示识别中/规划中/执行中/完成 |
+| T6.6 | 无控制台错误 | reload 后无 pageerror 或 error 级 console 消息 |
+
+### 运行方法
+
+```bash
+# 先构建应用
+npm run build
+
+# 运行 E2E 冒烟测试
+npm run test:e2e
+
+# 运行性能基准（结果写入 logs/e2e-perf.jsonl）
+npm run test:e2e:perf
+```
+
+### 性能基准指标
+
+`logs/e2e-perf.jsonl` 每行一条 JSON，包含：
+
+| 字段 | 含义 |
+|------|------|
+| `launchMs` | `electron.launch()` 耗时 |
+| `readyMs` | 从启动到状态页显示 `就绪` 耗时 |
+| `asr_pipeline.totalMs` | 模拟 ASR 到完成的总耗时 |
+| `asr_pipeline.transcribingMs` | 识别中阶段耗时 |
+| `asr_pipeline.planningMs` | 规划中阶段耗时 |
+| `asr_pipeline.actingMs` | 执行中阶段耗时 |
+| `asr_pipeline.executionMs` | 执行到完成阶段耗时 |
+
+---
+
 ## CI 脚本
 
 ```bash
 # .github/workflows/test.yml 或本地运行
 npm test              # L1 单元测试 (无硬件依赖)
 npm run test:http     # L2 HTTP 集成测试 (需要启动 Electron)
+npm run test:e2e      # L6 E2E 冒烟测试 (需要 Windows + Electron)
 npm run test:asr      # L5 ASR fixture 测试 (需要预录音频)
 npm run test:all      # 全部 (除 L3/L4 需人工)
 ```

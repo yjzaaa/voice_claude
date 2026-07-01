@@ -3,7 +3,7 @@ import { ClassifiedPlan, ClassifiedPlanStep } from './RiskClassifier';
 
 /** 计划执行结果。 */
 export interface PlanExecutionResult {
-  status: 'success' | 'step-failed';
+  status: 'success' | 'step-failed' | 'error';
   /** 失败的步骤（仅在 step-failed 时存在） */
   failedStep?: ClassifiedPlanStep;
   /** 导致失败的错误 */

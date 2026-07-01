@@ -12,6 +12,7 @@ describe('useRecordingState', () => {
 
   test('subscribes to statusAPI and reflects state changes', () => {
     let stateChangeHandler: (recording: boolean) => void = () => {};
+    let readyStateChangeHandler: (ready: boolean) => void = () => {};
     const toggle = jest.fn();
 
     (window as any).statusAPI = {
@@ -19,11 +20,18 @@ describe('useRecordingState', () => {
       onStateChange: (fn: (recording: boolean) => void) => {
         stateChangeHandler = fn;
       },
+      onRecorderReadyStateChange: (fn: (ready: boolean) => void) => {
+        readyStateChangeHandler = fn;
+      },
       removeAllListeners: jest.fn(),
     };
 
     const { result } = renderHook(() => useRecordingState());
     expect(result.current.recording).toBe(false);
+    expect(result.current.ready).toBe(false);
+
+    act(() => readyStateChangeHandler(true));
+    expect(result.current.ready).toBe(true);
 
     act(() => stateChangeHandler(true));
     expect(result.current.recording).toBe(true);
@@ -42,6 +50,7 @@ describe('useRecordingState', () => {
     (window as any).statusAPI = {
       toggle: jest.fn(),
       onStateChange: jest.fn(),
+      onRecorderReadyStateChange: jest.fn(),
       removeAllListeners,
     };
 

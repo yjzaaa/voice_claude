@@ -2,13 +2,28 @@ import { LlmClient, LlmRequest } from '../../ports/incoming/LlmClient';
 import { ToolRegistry } from './ToolRegistry';
 import { Plan } from '../models/Plan';
 import { SkillRegistry } from './SkillRegistry';
+import { WindowRole } from '../../ports/incoming/WindowManager';
 
 /** AgentPlanner 做决策时需要的桌面上下文。 */
 export interface AgentPlannerContext {
   /** 当前打开的窗口列表 */
-  windows: Array<{ id: string; title: string }>;
+  windows: Array<{
+    id: string;
+    title: string;
+    processName?: string;
+    appName?: string;
+    iconPath?: string | null;
+    role?: WindowRole;
+  }>;
   /** 当前焦点窗口 */
-  activeWindow?: { id: string; title: string };
+  activeWindow?: {
+    id: string;
+    title: string;
+    processName?: string;
+    appName?: string;
+    iconPath?: string | null;
+    role?: WindowRole;
+  };
   /** 最近执行的操作摘要 */
   recentActions: string[];
   /** 用户长期偏好 */
@@ -110,12 +125,25 @@ export class AgentPlanner {
 
   /** 构建用户提示，包含用户语音和桌面上下文。 */
   private buildUserPrompt(text: string, context: AgentPlannerContext): string {
+    const active = context.activeWindow;
+    const activeLine = active
+      ? `Active window: "${active.title}" [id=${active.id}, app=${active.appName ?? 'unknown'}, role=${active.role ?? 'unknown'}]`
+      : 'Active window: none';
+
+    const windowLines = context.windows
+      .map(
+        (w) =>
+          `  - "${w.title}" [id=${w.id}, app=${w.appName ?? 'unknown'}, role=${w.role ?? 'unknown'}]`,
+      )
+      .join('\n');
+
     const lines = [
       `User said: "${text}"`,
       '',
       'Desktop context:',
-      `Active window: ${context.activeWindow ? `${context.activeWindow.title} (${context.activeWindow.id})` : 'none'}`,
-      `Open windows: ${context.windows.map((w) => `${w.title} (${w.id})`).join(', ') || 'none'}`,
+      activeLine,
+      'Open windows:',
+      windowLines || '  none',
       `Recent actions: ${context.recentActions.join(', ') || 'none'}`,
       `Permitted high-risk tools: ${context.riskWhitelist?.join(', ') || 'none'}`,
     ];

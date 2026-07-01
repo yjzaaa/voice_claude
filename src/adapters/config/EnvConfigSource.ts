@@ -22,6 +22,11 @@ export class EnvConfigSource implements ConfigSource {
         backend: env('VOICE_CLAUDE_ASR_BACKEND') || 'doubao',
         language: env('VOICE_CLAUDE_ASR_LANGUAGE') || 'zh-CN',
         sampleRate: envNumber('VOICE_CLAUDE_ASR_SAMPLE_RATE') || 16000,
+        vad: {
+          silenceThreshold: envNumber('VOICE_CLAUDE_VAD_SILENCE_THRESHOLD') || 500,
+          minSpeechDurationMs: envNumber('VOICE_CLAUDE_VAD_MIN_SPEECH_MS') || 400,
+          maxSpeechDurationMs: envNumber('VOICE_CLAUDE_VAD_MAX_SPEECH_MS') || 30000,
+        },
       },
       llm: {
         apiKey:

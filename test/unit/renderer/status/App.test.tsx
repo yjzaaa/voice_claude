@@ -33,6 +33,7 @@ describe('App', () => {
       addRiskWhitelist: jest.fn().mockResolvedValue(undefined),
       removeRiskWhitelist: jest.fn().mockResolvedValue(undefined),
       getRecentActions: jest.fn().mockResolvedValue([]),
+      getSkills: jest.fn().mockResolvedValue([]),
     };
   });
 
@@ -42,7 +43,12 @@ describe('App', () => {
   });
 
   test('renders idle state', () => {
-    useRecordingStateSpy.mockReturnValue({ recording: false, error: null, toggle: jest.fn() });
+    useRecordingStateSpy.mockReturnValue({
+      recording: false,
+      ready: true,
+      error: null,
+      toggle: jest.fn(),
+    });
     render(<App />);
     expect(screen.getByText('voice_claude')).toBeInTheDocument();
     expect(screen.getByText('就绪')).toBeInTheDocument();
@@ -51,7 +57,12 @@ describe('App', () => {
   });
 
   test('renders recording state', () => {
-    useRecordingStateSpy.mockReturnValue({ recording: true, error: null, toggle: jest.fn() });
+    useRecordingStateSpy.mockReturnValue({
+      recording: true,
+      ready: true,
+      error: null,
+      toggle: jest.fn(),
+    });
     render(<App />);
     expect(screen.getByText('🔴 录音中...')).toBeInTheDocument();
     expect(screen.getByText('停止录音')).toBeInTheDocument();
@@ -60,7 +71,12 @@ describe('App', () => {
 
   test('calls toggle on status button click', () => {
     const toggle = jest.fn();
-    useRecordingStateSpy.mockReturnValue({ recording: false, error: null, toggle });
+    useRecordingStateSpy.mockReturnValue({
+      recording: false,
+      ready: true,
+      error: null,
+      toggle,
+    });
     render(<App />);
     fireEvent.click(screen.getByText('开始录音'));
     expect(toggle).toHaveBeenCalled();
@@ -69,6 +85,7 @@ describe('App', () => {
   test('shows error message', () => {
     useRecordingStateSpy.mockReturnValue({
       recording: false,
+      ready: false,
       error: 'IPC 未连接',
       toggle: jest.fn(),
     });
@@ -77,7 +94,12 @@ describe('App', () => {
   });
 
   test('opens settings page when gear is clicked and can go back', async () => {
-    useRecordingStateSpy.mockReturnValue({ recording: false, error: null, toggle: jest.fn() });
+    useRecordingStateSpy.mockReturnValue({
+      recording: false,
+      ready: true,
+      error: null,
+      toggle: jest.fn(),
+    });
     render(<App />);
 
     fireEvent.click(screen.getByLabelText('设置'));

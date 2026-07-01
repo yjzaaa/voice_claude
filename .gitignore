@@ -22,6 +22,10 @@ verification-screenshots/
 # Coverage
 coverage/
 
+# Playwright e2e artifacts
+playwright-report/
+playwright/.cache
+
 # Local dev / secrets
 .env
 .env.local

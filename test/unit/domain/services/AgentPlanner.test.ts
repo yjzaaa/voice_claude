@@ -124,4 +124,44 @@ describe('AgentPlanner', () => {
     expect(result.plan?.goal).toBe('open Claude Code');
     expect(llm.complete).not.toHaveBeenCalled();
   });
+
+  test('includes enhanced window context in user prompt', async () => {
+    const llm = createLlm(
+      JSON.stringify({
+        isCommand: true,
+        confidence: 0.9,
+        plan: { goal: 'focus editor', steps: [{ tool: 'focus_window', params: { id: 1 } }] },
+        reason: 'user wants to focus editor',
+      }),
+    );
+    const planner = new AgentPlanner(llm, createRegistry());
+
+    const context: AgentPlannerContext = {
+      windows: [
+        {
+          id: '1',
+          title: 'main.ts - voice_claude',
+          processName: 'Code',
+          appName: 'VS Code',
+          role: 'editor',
+        },
+      ],
+      activeWindow: {
+        id: '1',
+        title: 'main.ts - voice_claude',
+        processName: 'Code',
+        appName: 'VS Code',
+        role: 'editor',
+      },
+      recentActions: [],
+      preferences: {},
+    };
+
+    await planner.plan('focus code', context);
+
+    const call = (llm.complete as jest.Mock).mock.calls[0][0];
+    expect(call.userPrompt).toContain('VS Code');
+    expect(call.userPrompt).toContain('editor');
+    expect(call.userPrompt).toContain('main.ts - voice_claude');
+  });
 });

@@ -4,7 +4,16 @@ import { ConfigSource, AppConfig } from '../../ports/incoming/ConfigSource';
 
 function defaultConfig(): AppConfig {
   return {
-    asr: { backend: 'doubao', language: 'zh-CN', sampleRate: 16000 },
+    asr: {
+      backend: 'doubao',
+      language: 'zh-CN',
+      sampleRate: 16000,
+      vad: {
+        silenceThreshold: 500,
+        minSpeechDurationMs: 400,
+        maxSpeechDurationMs: 30000,
+      },
+    },
     llm: {
       apiKey: '',
       apiUrl: 'https://api.deepseek.com/v1',

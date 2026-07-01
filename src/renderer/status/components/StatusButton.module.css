@@ -24,3 +24,13 @@
   background: #e94560;
   color: #fff;
 }
+
+.disabled {
+  background: #555;
+  color: #aaa;
+  cursor: not-allowed;
+}
+
+.disabled:hover {
+  filter: none;
+}

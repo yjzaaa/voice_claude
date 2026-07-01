@@ -1,5 +1,10 @@
 import * as path from 'path';
-import { WindowEvent, WindowInfo, WindowManager } from '../../../ports/incoming/WindowManager';
+import {
+  WindowEvent,
+  WindowInfo,
+  WindowManager,
+  WindowRole,
+} from '../../../ports/incoming/WindowManager';
 
 export interface Win32WindowManagerDeps {
   pythonExecutable: string;
@@ -33,15 +38,26 @@ export class Win32WindowManager implements WindowManager {
       if (!r) return [];
       return r
         .split('\n')
-        .map((line) => {
-          const [idStr, ...titleParts] = line.split('|');
-          const id = parseInt(idStr, 10);
-          return Number.isFinite(id) ? { id, title: titleParts.join('|') } : null;
-        })
+        .map((line) => this.parseWindowLine(line))
         .filter((w): w is WindowInfo => w !== null);
     } catch {
       return [];
     }
+  }
+
+  private parseWindowLine(line: string): WindowInfo | null {
+    const [idStr, title, processName, iconPath] = line.split('|');
+    const id = parseInt(idStr, 10);
+    if (!Number.isFinite(id)) return null;
+    const role = inferWindowRole(title, processName);
+    return {
+      id,
+      title: title ?? '',
+      processName: processName || inferProcessName(title),
+      appName: processName || inferProcessName(title),
+      iconPath: iconPath || null,
+      role,
+    };
   }
 
   async focusWindow(id: number): Promise<void> {
@@ -126,4 +142,38 @@ export class Win32WindowManager implements WindowManager {
       },
     };
   }
+}
+
+function inferProcessName(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes('claude')) return 'claude';
+  if (t.includes('code')) return 'code';
+  if (t.includes('cursor')) return 'cursor';
+  if (t.includes('terminal') || t.includes('cmd') || t.includes('powershell')) return 'terminal';
+  return '';
+}
+
+export function inferWindowRole(title?: string, processName?: string): WindowRole {
+  const t = (title ?? '').toLowerCase();
+  const p = (processName ?? '').toLowerCase();
+
+  if (t.includes('claude') || p.includes('claude')) return 'assistant';
+  if (p.includes('code') || p.includes('cursor') || t.includes('visual studio code'))
+    return 'editor';
+  if (p.includes('wt') || p.includes('terminal') || p.includes('cmd') || p.includes('powershell')) {
+    return 'terminal';
+  }
+  if (
+    p.includes('chrome') ||
+    p.includes('edge') ||
+    p.includes('firefox') ||
+    p.includes('browser')
+  ) {
+    return 'browser';
+  }
+  if (p.includes('explorer') || t.includes('文件资源管理器')) return 'file_manager';
+  if (p.includes('wechat') || p.includes('slack') || p.includes('teams') || t.includes('微信')) {
+    return 'chat';
+  }
+  return 'unknown';
 }

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>Doubao Recorder</title>
+  <title>Voice Recorder</title>
 </head>
 <body>
 <script>
@@ -18,13 +18,17 @@ let recording = false;
 let chunkCount = 0;
 let totalSamples = 0;
 let lastVoiceTime = 0;
+let recordingStartTime = 0;
 let maxDurationTimer = null;
 let vadTimer = null;
 
-// 配置
-const VAD_THRESHOLD = 500;        // 16-bit PCM 峰值阈值，超过视为有声
-const SILENCE_TIMEOUT = 1500;     // 静音超过 1.5 秒自动停止
-const MAX_DURATION = 30000;       // 最长录制 30 秒
+// 默认 VAD 配置；主进程会通过 recorder:config 覆盖
+let config = {
+  silenceThreshold: 500,        // 16-bit PCM 峰值阈值，超过视为有声
+  minSpeechDurationMs: 400,     // 小于此长度的语音段会被丢弃，避免过短切分
+  maxSpeechDurationMs: 30000,   // 最长录制时间
+  silenceTimeoutMs: 1500,       // 静音超过此时长自动停止
+};
 
 function logR(cmp, msg, extra) { log('info', cmp, msg, extra); }
 function logW(cmp, msg, extra) { log('warn', cmp, msg, extra); }
@@ -59,6 +63,23 @@ function measurePeak(pcm) {
   return peak;
 }
 
+function applyConfig(next) {
+  if (!next || typeof next !== 'object') return;
+  if (next.vad && typeof next.vad === 'object') {
+    config = {
+      silenceThreshold: Number(next.vad.silenceThreshold) || config.silenceThreshold,
+      minSpeechDurationMs: Number(next.vad.minSpeechDurationMs) || config.minSpeechDurationMs,
+      maxSpeechDurationMs: Number(next.vad.maxSpeechDurationMs) || config.maxSpeechDurationMs,
+      silenceTimeoutMs: Number(next.vad.silenceTimeoutMs) || config.silenceTimeoutMs,
+    };
+  }
+  logR('recorder-renderer', 'config applied', config);
+}
+
+api.onConfig((payload) => {
+  applyConfig(payload);
+});
+
 async function initAudio() {
   logR('recorder-renderer', 'initAudio starting');
   try {
@@ -83,11 +104,11 @@ async function initAudio() {
       totalSamples += pcm.length;
       const peak = measurePeak(pcm);
       const now = Date.now();
-      if (peak > VAD_THRESHOLD) {
+      if (peak > config.silenceThreshold) {
         lastVoiceTime = now;
       }
       if (chunkCount % 10 === 0) {
-        logR('recorder-renderer', 'audio chunk', { chunkCount, totalSamples, peak, voice: peak > VAD_THRESHOLD });
+        logR('recorder-renderer', 'audio chunk', { chunkCount, totalSamples, peak, voice: peak > config.silenceThreshold });
       }
     };
 
@@ -108,20 +129,21 @@ function startRecording() {
   chunkCount = 0;
   totalSamples = 0;
   recording = true;
-  lastVoiceTime = Date.now();
+  recordingStartTime = Date.now();
+  lastVoiceTime = recordingStartTime;
   logR('recorder-renderer', 'recording started');
 
   // 最长录制时间保护
   maxDurationTimer = setTimeout(() => {
     logW('recorder-renderer', 'max duration reached, auto-stopping');
     stopRecording();
-  }, MAX_DURATION);
+  }, config.maxSpeechDurationMs);
 
   // VAD：定期检查是否长时间静音
   vadTimer = setInterval(() => {
     if (!recording) return;
     const silenceMs = Date.now() - lastVoiceTime;
-    if (silenceMs > SILENCE_TIMEOUT) {
+    if (silenceMs > config.silenceTimeoutMs) {
       logR('recorder-renderer', 'silence detected, auto-stopping', { silenceMs });
       stopRecording();
     }
@@ -135,16 +157,26 @@ function stopRecording() {
   if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
   logR('recorder-renderer', 'recording stopped', { chunkCount, totalSamples });
 
-  if (chunks.length === 0) {
+  // 清空 PCM accumulator，避免下一段录音混入旧数据
+  const captured = chunks;
+  chunks = [];
+
+  if (captured.length === 0) {
     logW('recorder-renderer', 'no audio captured');
     api.sendPcm(new ArrayBuffer(0));
     return;
   }
 
-  const pcm = concatInt16Arrays(chunks);
-  chunks = [];
+  const durationMs = Date.now() - recordingStartTime;
+  if (durationMs < config.minSpeechDurationMs) {
+    logW('recorder-renderer', 'audio too short, discarding', { durationMs, minSpeechDurationMs: config.minSpeechDurationMs });
+    api.sendPcm(new ArrayBuffer(0));
+    return;
+  }
+
+  const pcm = concatInt16Arrays(captured);
   const peak = measurePeak(pcm);
-  logR('recorder-renderer', 'sending pcm', { bytes: pcm.byteLength, peak });
+  logR('recorder-renderer', 'sending pcm', { bytes: pcm.byteLength, peak, durationMs });
   api.sendPcm(pcm.buffer);
 }
 
