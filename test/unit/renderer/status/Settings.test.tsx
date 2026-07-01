@@ -9,8 +9,9 @@ describe('Settings', () => {
   const createMockAPI = () => ({
     getPreferences: jest
       .fn()
-      .mockResolvedValue({ llm: { apiKey: 'sk-test' }, asr: { backend: 'google' } }),
+      .mockResolvedValue({ llm: { apiKey: 'sk-test', apiUrl: '' }, asr: { backend: 'doubao' } }),
     setPreferences: jest.fn().mockResolvedValue(undefined),
+    notifySettingsChanged: jest.fn(),
     getRiskWhitelist: jest.fn().mockResolvedValue(['send_text']),
     addRiskWhitelist: jest.fn().mockResolvedValue(undefined),
     removeRiskWhitelist: jest.fn().mockResolvedValue(undefined),
@@ -39,7 +40,7 @@ describe('Settings', () => {
     await waitFor(() => expect(screen.getByText('设置')).toBeInTheDocument());
 
     expect(screen.getByDisplayValue('sk-test')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('google')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('doubao')).toBeInTheDocument();
     expect(screen.getByText('send_text')).toBeInTheDocument();
     expect(screen.getByText('success: open code')).toBeInTheDocument();
     expect(screen.getByText('open-claude')).toBeInTheDocument();
@@ -56,20 +57,72 @@ describe('Settings', () => {
     await waitFor(() => expect(screen.getByText(/IPC 未连接/)).toBeInTheDocument());
   });
 
-  test('saves preferences when save button is clicked', async () => {
+  test('saves preferences and notifies main process when save button is clicked', async () => {
     render(<Settings onClose={jest.fn()} />);
     await waitFor(() => expect(screen.getByText('设置')).toBeInTheDocument());
 
     fireEvent.change(screen.getByPlaceholderText('sk-...'), { target: { value: 'sk-new' } });
-    fireEvent.change(screen.getByPlaceholderText('google_stt'), { target: { value: 'doubao' } });
+    fireEvent.change(screen.getByPlaceholderText('https://api.deepseek.com/v1'), {
+      target: { value: 'https://api.example.com/v1' },
+    });
+    fireEvent.change(screen.getByLabelText('ASR 后端'), { target: { value: 'vosk' } });
     fireEvent.click(screen.getByText('保存偏好'));
 
     await waitFor(() => {
       expect(mockAPI.setPreferences).toHaveBeenCalledWith({
-        llm: { apiKey: 'sk-new' },
-        asr: { backend: 'doubao' },
+        llm: { apiKey: 'sk-new', apiUrl: 'https://api.example.com/v1' },
+        asr: { backend: 'vosk' },
       });
     });
+    expect(mockAPI.notifySettingsChanged).toHaveBeenCalled();
+  });
+
+  test('disables save and shows error for invalid LLM Base URL', async () => {
+    render(<Settings onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByText('设置')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('https://api.deepseek.com/v1'), {
+      target: { value: 'not-a-url' },
+    });
+
+    expect(screen.getByText('LLM Base URL 必须是有效的 HTTP(S) 地址')).toBeInTheDocument();
+    expect(screen.getByText('保存偏好')).toBeDisabled();
+  });
+
+  test('disables save and shows error for invalid ASR backend', async () => {
+    render(<Settings onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByText('设置')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('ASR 后端'), { target: { value: '' } });
+
+    expect(
+      screen.getByText('ASR 后端必须是 doubao、vosk、chrome 或 composite 之一'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('保存偏好')).toBeDisabled();
+  });
+
+  test('disables save and shows error when API Key is empty in non-dev mode', async () => {
+    render(<Settings onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByText('设置')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('sk-...'), { target: { value: '' } });
+
+    expect(screen.getByText('API Key 不能为空')).toBeInTheDocument();
+    expect(screen.getByText('保存偏好')).toBeDisabled();
+  });
+
+  test('toggles API Key visibility', async () => {
+    render(<Settings onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByText('设置')).toBeInTheDocument());
+
+    const keyInput = screen.getByPlaceholderText('sk-...');
+    expect(keyInput).toHaveAttribute('type', 'password');
+
+    fireEvent.click(screen.getByText('显示'));
+    expect(keyInput).toHaveAttribute('type', 'text');
+
+    fireEvent.click(screen.getByText('隐藏'));
+    expect(keyInput).toHaveAttribute('type', 'password');
   });
 
   test('adds a tool to the whitelist', async () => {

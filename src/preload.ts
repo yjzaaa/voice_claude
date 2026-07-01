@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   getPreferences: () => ipcRenderer.invoke('settings:getPreferences'),
   setPreferences: (prefs: Record<string, unknown>) =>
     ipcRenderer.invoke('settings:setPreferences', prefs),
+  notifySettingsChanged: () => ipcRenderer.send('settings:changed'),
   getRiskWhitelist: () => ipcRenderer.invoke('settings:getRiskWhitelist'),
   addRiskWhitelist: (tool: string) => ipcRenderer.invoke('settings:addRiskWhitelist', tool),
   removeRiskWhitelist: (tool: string) => ipcRenderer.invoke('settings:removeRiskWhitelist', tool),

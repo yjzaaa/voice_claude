@@ -48,6 +48,14 @@ export class VoiceAgent {
   ) {}
 
   /**
+   * 替换当前 ASR 引擎，用于配置变更后热切换。
+   * @param asr - 新的 ASR 引擎
+   */
+  setAsrEngine(asr: AsrEngine): void {
+    this.asr = asr;
+  }
+
+  /**
    * 处理一段 PCM 音频：识别 → 规划 → 执行。
    * @param pcm - 原始 PCM 音频数据
    */

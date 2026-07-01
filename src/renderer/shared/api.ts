@@ -54,6 +54,7 @@ export interface SkillInfo {
 export interface SettingsAPI {
   getPreferences(): Promise<Record<string, unknown>>;
   setPreferences(prefs: Record<string, unknown>): Promise<void>;
+  notifySettingsChanged(): void;
   getRiskWhitelist(): Promise<string[]>;
   addRiskWhitelist(tool: string): Promise<void>;
   removeRiskWhitelist(tool: string): Promise<void>;

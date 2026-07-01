@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getSettingsAPI, SkillInfo } from '../shared/api';
 import styles from './Settings.module.css';
 
@@ -6,6 +6,16 @@ import styles from './Settings.module.css';
 export interface SettingsProps {
   /** 返回状态页。 */
   onClose: () => void;
+}
+
+const ASR_BACKENDS = ['doubao', 'vosk', 'chrome', 'composite'] as const;
+
+const isDev = typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
+
+interface ValidationErrors {
+  apiKey?: string;
+  apiUrl?: string;
+  asrBackend?: string;
 }
 
 /**
@@ -22,6 +32,29 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  const validation = useMemo<ValidationErrors>(() => {
+    const errors: ValidationErrors = {};
+    const apiKey = String(getValueAtPath(preferences, 'llm.apiKey') ?? '').trim();
+    if (!isDev && apiKey === '') {
+      errors.apiKey = 'API Key 不能为空';
+    }
+
+    const apiUrl = String(getValueAtPath(preferences, 'llm.apiUrl') ?? '').trim();
+    if (apiUrl !== '' && !/^https?:\/\/.+/.test(apiUrl)) {
+      errors.apiUrl = 'LLM Base URL 必须是有效的 HTTP(S) 地址';
+    }
+
+    const asrBackend = String(getValueAtPath(preferences, 'asr.backend') ?? '').trim();
+    if (!ASR_BACKENDS.includes(asrBackend as (typeof ASR_BACKENDS)[number])) {
+      errors.asrBackend = 'ASR 后端必须是 doubao、vosk、chrome 或 composite 之一';
+    }
+
+    return errors;
+  }, [preferences]);
+
+  const hasValidationError = Object.keys(validation).length > 0;
 
   const load = async () => {
     if (!api) {
@@ -62,10 +95,12 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   };
 
   const savePreferences = async () => {
-    if (!api) return;
+    if (!api || hasValidationError) return;
     setSaving(true);
     try {
       await api.setPreferences(preferences);
+      api.notifySettingsChanged();
+      setError(null);
     } catch (err: any) {
       setError(err.message ?? '保存失败');
     } finally {
@@ -141,23 +176,56 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
         <h3>偏好设置</h3>
         <label className={styles.field}>
           <span>LLM API Key</span>
+          <div className={styles.inputRow}>
+            <input
+              type={showApiKey ? 'text' : 'password'}
+              value={String(getValueAtPath(preferences, 'llm.apiKey') ?? '')}
+              onChange={(e) => updatePreference('llm.apiKey', e.target.value)}
+              placeholder="sk-..."
+              aria-invalid={Boolean(validation.apiKey)}
+            />
+            <button
+              type="button"
+              className={styles.toggleButton}
+              onClick={() => setShowApiKey((prev) => !prev)}
+            >
+              {showApiKey ? '隐藏' : '显示'}
+            </button>
+          </div>
+          {validation.apiKey && <p className={styles.fieldError}>{validation.apiKey}</p>}
+        </label>
+        <label className={styles.field}>
+          <span>LLM Base URL</span>
           <input
-            type="password"
-            value={String(getValueAtPath(preferences, 'llm.apiKey') ?? '')}
-            onChange={(e) => updatePreference('llm.apiKey', e.target.value)}
-            placeholder="sk-..."
+            type="text"
+            value={String(getValueAtPath(preferences, 'llm.apiUrl') ?? '')}
+            onChange={(e) => updatePreference('llm.apiUrl', e.target.value)}
+            placeholder="https://api.deepseek.com/v1"
+            aria-invalid={Boolean(validation.apiUrl)}
           />
+          {validation.apiUrl && <p className={styles.fieldError}>{validation.apiUrl}</p>}
         </label>
         <label className={styles.field}>
           <span>ASR 后端</span>
-          <input
-            type="text"
+          <select
             value={String(getValueAtPath(preferences, 'asr.backend') ?? '')}
             onChange={(e) => updatePreference('asr.backend', e.target.value)}
-            placeholder="google_stt"
-          />
+            aria-invalid={Boolean(validation.asrBackend)}
+          >
+            <option value="">请选择</option>
+            {ASR_BACKENDS.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+          {validation.asrBackend && <p className={styles.fieldError}>{validation.asrBackend}</p>}
         </label>
-        <button className={styles.saveButton} onClick={savePreferences} disabled={saving}>
+        <button
+          className={styles.saveButton}
+          onClick={savePreferences}
+          disabled={saving || hasValidationError}
+        >
           {saving ? '保存中...' : '保存偏好'}
         </button>
       </section>

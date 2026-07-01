@@ -8,7 +8,13 @@
 import { app, BrowserWindow, Tray, screen, nativeImage, ipcMain } from 'electron';
 import * as path from 'path';
 import { createApp } from './composition-root';
-import { initRecorder, startRecording, stopRecording, isRecorderRecording } from './asr/recorder';
+import { createLlmClient } from './adapters/llm/LlmClientFactory';
+import { DoubaoAsrEngine } from './adapters/asr/DoubaoAsrEngine';
+import { VoskAsrEngine } from './adapters/asr/VoskAsrEngine';
+import { CompositeAsrEngine } from './adapters/asr/CompositeAsrEngine';
+import { LlmClient } from './ports/incoming/LlmClient';
+import { AsrEngine } from './ports/incoming/AsrEngine';
+import { ElectronAudioCapture } from './adapters/audio/ElectronAudioCapture';
 import { installGlobalExceptionHandlers } from './infrastructure/errors/GlobalExceptionHandler';
 import {
   PermissionRequestPayload,
@@ -17,6 +23,7 @@ import {
 } from './infrastructure/ipc/PermissionIpc';
 
 const isDev = !app.isPackaged;
+const isTest = process.env.NODE_ENV === 'test';
 
 function icon(c: string) {
   return nativeImage.createFromDataURL(
@@ -25,7 +32,9 @@ function icon(c: string) {
 }
 
 function statusUrl(): string {
-  return isDev
+  // E2E tests run the packaged build directly; skip the dev server in test mode
+  // so the status window loads the static renderer file without waiting for fallback.
+  return isDev && !isTest
     ? 'http://localhost:5173/status.html'
     : path.join(__dirname, 'renderer', 'status.html');
 }
@@ -35,6 +44,8 @@ async function main(): Promise<void> {
   const {
     eventBus,
     voiceAgent,
+    agentPlanner,
+    config,
     logger,
     windowRepository,
     scheduler,
@@ -42,7 +53,6 @@ async function main(): Promise<void> {
     riskClassifier,
     planExecutor,
     auditLogger,
-    config,
     skillRegistry,
   } = services;
 
@@ -129,6 +139,48 @@ async function main(): Promise<void> {
     if (!tray) return;
     tray.setImage(icon(recording ? '#e94560' : '#00e676'));
     tray.setToolTip(recording ? 'voice_claude - 监听中，点击停止' : 'voice_claude - 点击开始监听');
+  }
+
+  // 根据用户保存的偏好重新装配 LLM / ASR 服务
+  async function applySettingsFromPreferences(): Promise<void> {
+    const prefs = (await memoryStore.get<Record<string, unknown>>('preferences')) ?? {};
+    const llmPrefs = (prefs.llm as Record<string, unknown> | undefined) ?? {};
+    const asrPrefs = (prefs.asr as Record<string, unknown> | undefined) ?? {};
+
+    if (llmPrefs.apiKey !== undefined) config.llm.apiKey = String(llmPrefs.apiKey);
+    if (llmPrefs.apiUrl !== undefined) config.llm.apiUrl = String(llmPrefs.apiUrl);
+    if (llmPrefs.model !== undefined) config.llm.model = String(llmPrefs.model);
+    if (llmPrefs.timeoutMs !== undefined) config.llm.timeoutMs = Number(llmPrefs.timeoutMs);
+    if (asrPrefs.backend !== undefined) config.asr.backend = String(asrPrefs.backend);
+    if (asrPrefs.language !== undefined) config.asr.language = String(asrPrefs.language);
+    if (asrPrefs.sampleRate !== undefined) config.asr.sampleRate = Number(asrPrefs.sampleRate);
+
+    const llmClient: LlmClient = createLlmClient(config.llm);
+
+    const backend = config.asr.backend || 'composite';
+    const doubaoEngine = new DoubaoAsrEngine({
+      appId: config.doubao.appId,
+      accessToken: config.doubao.accessToken,
+    });
+    const voskEngine = new VoskAsrEngine();
+    let asrEngine: AsrEngine;
+    if (backend === 'doubao') {
+      asrEngine = doubaoEngine;
+    } else if (backend === 'vosk') {
+      asrEngine = voskEngine;
+    } else {
+      asrEngine = new CompositeAsrEngine([doubaoEngine, voskEngine]);
+    }
+
+    agentPlanner.setLlmClient(llmClient);
+    voiceAgent.setAsrEngine(asrEngine);
+    (services as any).llmClient = llmClient;
+    (services as any).asrEngine = asrEngine;
+
+    logger.info('settings', 'configuration reloaded from preferences', {
+      backend: config.asr.backend,
+      apiUrl: config.llm.apiUrl,
+    });
   }
 
   app.whenReady().then(() => {
@@ -220,25 +272,6 @@ async function main(): Promise<void> {
       });
     });
 
-    tray = new Tray(icon('#00e676'));
-    tray.setToolTip('voice_claude - 点击切换监听');
-    tray.on('click', () => {
-      if (isRecorderRecording()) {
-        stopRecording();
-      } else {
-        startRecording();
-      }
-    });
-
-    // 状态窗口按钮切换监听
-    ipcMain.on('status:toggle', () => {
-      if (isRecorderRecording()) {
-        stopRecording();
-      } else {
-        startRecording();
-      }
-    });
-
     // 渲染进程日志桥
     ipcMain.on('renderer:log', (_event, level: string, cmp: string, msg: string, extra?: any) => {
       if (level === 'error') logger.error(cmp, msg, extra);
@@ -297,33 +330,62 @@ async function main(): Promise<void> {
     });
 
     // 初始化录音器：VAD 自动分段，每段交给 agent
-    initRecorder(
-      {
-        onPcm: async (pcm: Buffer) => {
-          logger.info('recorder', 'pcm segment', { bytes: pcm.length });
-          try {
-            await voiceAgent.onPcm(pcm);
-          } catch (err: any) {
-            logger.error('voiceAgent', 'onPcm failed', { error: err.message });
-          }
-          // 短暂停顿后继续监听下一段语音
-          setTimeout(() => {
-            if (!isQuitting) startRecording();
-          }, 300);
-        },
-        onStateChange: (recording: boolean) => {
-          logger.info('recorder', 'state', { recording });
-          win?.webContents.send('status:state', recording);
-          updateTray(recording);
-        },
-      },
-      {
-        vad: config.asr.vad,
-        onReadyStateChange: (ready: boolean) => {
-          win?.webContents.send('recorder:ready-state', ready);
-        },
-      },
-    );
+    const audioCapture = new ElectronAudioCapture({
+      createWindow: (options: any) => new BrowserWindow(options),
+      ipcMain,
+      htmlPath: path.join(__dirname, '..', 'html', 'recorder.html'),
+      logger,
+      vad: config.asr.vad,
+      maxLoadRetries: 3,
+      retryDelayMs: 1000,
+    });
+
+    // 设置保存成功后，重新创建受影响的 LLM / ASR 服务实例，并同步 VAD 配置
+    ipcMain.on('settings:changed', () => {
+      applySettingsFromPreferences()
+        .then(() => {
+          audioCapture.setVad(config.asr.vad);
+        })
+        .catch((err) =>
+          logger.error('settings', 'failed to apply changed settings', { error: err.message }),
+        );
+    });
+
+    audioCapture.onPcm(async (pcm: Buffer) => {
+      logger.info('recorder', 'pcm segment', { bytes: pcm.length });
+      try {
+        await voiceAgent.onPcm(pcm);
+      } catch (err: any) {
+        logger.error('voiceAgent', 'onPcm failed', { error: err.message });
+      }
+      // 短暂停顿后继续监听下一段语音
+      setTimeout(() => {
+        if (!isQuitting) audioCapture.start();
+      }, 300);
+    });
+
+    audioCapture.onStateChange((recording: boolean) => {
+      logger.info('recorder', 'state', { recording });
+      win?.webContents.send('status:state', recording);
+      updateTray(recording);
+    });
+
+    audioCapture.onReadyStateChange((ready: boolean) => {
+      logger.info('recorder', 'ready state', { ready });
+      win?.webContents.send('recorder:ready-state', { ready });
+    });
+
+    tray = new Tray(icon('#00e676'));
+    tray.setToolTip('voice_claude - 点击切换监听');
+    tray.on('click', () => {
+      audioCapture.toggle();
+    });
+
+    // 状态窗口按钮切换监听
+    ipcMain.handle('status:toggle', () => {
+      const recording = audioCapture.toggle();
+      return { recording };
+    });
 
     win.show();
 
@@ -331,7 +393,7 @@ async function main(): Promise<void> {
     scheduler.start();
 
     // 启动连续监听
-    setTimeout(() => startRecording(), 1000);
+    setTimeout(() => audioCapture.start(), 1000);
   });
 
   app.on('window-all-closed', () => {});

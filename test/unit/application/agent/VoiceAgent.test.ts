@@ -199,4 +199,62 @@ describe('VoiceAgent', () => {
 
     expect(plannerSpy).toHaveBeenCalledWith('hello', context);
   });
+
+  test('retries ASR once on failure and emits asr-failed on persistent failure', async () => {
+    const events: Array<{ event: string; payload?: unknown }> = [];
+    const bus = new EventBus();
+    bus.on('agent:asr-failed', (p) => events.push({ event: 'asr-failed', payload: p }));
+
+    const transcribe = jest.fn().mockRejectedValue(new Error('network down'));
+    const asr: AsrEngine = { name: 'mock', transcribe, isAvailable: () => true };
+    const agent = new VoiceAgent(
+      asr,
+      createPlanner({ isCommand: false, confidence: 0.2, reason: 'not a command' }),
+      createClassifier(),
+      createExecutor({ status: 'success' }),
+      bus,
+      createAudit(),
+    );
+
+    await agent.onPcm(Buffer.from('pcm'));
+
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(events).toHaveLength(1);
+    expect(events[0].event).toBe('asr-failed');
+    expect((events[0].payload as any).error).toBe('network down');
+  });
+
+  test('succeeds on ASR retry after first failure', async () => {
+    const events: string[] = [];
+    const bus = new EventBus();
+    bus.on('agent:success', () => events.push('success'));
+
+    let attempt = 0;
+    const transcribe = jest.fn().mockImplementation(() => {
+      attempt += 1;
+      if (attempt === 1) return Promise.reject(new Error('timeout'));
+      return Promise.resolve('send hi');
+    });
+    const asr: AsrEngine = { name: 'mock', transcribe, isAvailable: () => true };
+    const response: AgentPlannerResponse = {
+      isCommand: true,
+      confidence: 0.9,
+      plan: { goal: 'send hi', steps: [{ tool: 'send_text', params: { text: 'hi' } }] },
+    };
+
+    const agent = new VoiceAgent(
+      asr,
+      createPlanner(response),
+      createClassifier(),
+      createExecutor({ status: 'success' }),
+      bus,
+      createAudit(),
+    );
+
+    await agent.onPcm(Buffer.from('pcm'));
+
+    expect(attempt).toBe(2);
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(events).toEqual(['success']);
+  });
 });

@@ -58,7 +58,8 @@
   margin-bottom: 4px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   box-sizing: border-box;
   padding: 6px 8px;
@@ -70,8 +71,34 @@
   outline: none;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
   border-color: #00e676;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.inputRow input {
+  flex: 1;
+}
+
+.toggleButton {
+  padding: 4px 10px;
+  font-size: 0.8em;
+  background: #2196f3;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fieldError {
+  color: #e94560;
+  font-size: 0.8em;
+  margin: 4px 0 0;
 }
 
 .saveButton,

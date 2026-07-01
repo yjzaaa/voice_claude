@@ -68,6 +68,14 @@ export class AgentPlanner {
   ) {}
 
   /**
+   * 替换当前 LLM 客户端，用于配置变更后热切换。
+   * @param llm - 新的 LLM 客户端
+   */
+  setLlmClient(llm: LlmClient): void {
+    this.llm = llm;
+  }
+
+  /**
    * 解析用户语音文本，决定是否为指令并生成计划。
    * 如果已配置 SkillRegistry 且文本匹配某个技能，直接返回该技能计划，不走 LLM。
    * @param text - ASR 识别后的文本

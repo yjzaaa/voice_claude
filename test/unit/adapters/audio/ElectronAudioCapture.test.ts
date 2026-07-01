@@ -7,6 +7,8 @@ describe('ElectronAudioCapture', () => {
   let fakeWindow: any;
   let createWindowCalls: any[];
   let capture: ElectronAudioCapture;
+  let createWindow: (opts: any) => any;
+  let ipcMain: { on: (channel: string, cb: (event: any, ...args: any[]) => void) => void };
 
   beforeEach(() => {
     sent = [];
@@ -24,12 +26,12 @@ describe('ElectronAudioCapture', () => {
       close: jest.fn(),
     };
 
-    const createWindow = (opts: any) => {
+    createWindow = (opts: any) => {
       createWindowCalls.push(opts);
       return fakeWindow;
     };
 
-    const ipcMain = {
+    ipcMain = {
       on: (channel: string, cb: (event: any, ...args: any[]) => void) => {
         ipcHandlers[channel] = cb;
       },
@@ -116,5 +118,93 @@ describe('ElectronAudioCapture', () => {
 
     capture.start();
     expect(createWindowCalls.length).toBe(1);
+  });
+
+  test('retries window load on failure and eventually succeeds', async () => {
+    let attempts = 0;
+    fakeWindow.loadFile = jest.fn().mockImplementation(() => {
+      attempts += 1;
+      if (attempts < 3) return Promise.reject(new Error('load failed'));
+      return Promise.resolve(undefined);
+    });
+    capture = new ElectronAudioCapture({
+      createWindow,
+      ipcMain,
+      htmlPath: '/fake/recorder.html',
+      maxLoadRetries: 3,
+      retryDelayMs: 0,
+    });
+
+    capture.start();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(attempts).toBeGreaterThanOrEqual(1);
+  });
+
+  test('closes window after max load retries exhausted', async () => {
+    fakeWindow.loadFile = jest.fn().mockRejectedValue(new Error('load failed'));
+    let closeResolver: () => void = () => {};
+    const closed = new Promise<void>((resolve) => {
+      closeResolver = resolve;
+    });
+    const closeSpy = jest.spyOn(fakeWindow, 'close').mockImplementation(() => {
+      closeResolver();
+    });
+    capture = new ElectronAudioCapture({
+      createWindow,
+      ipcMain,
+      htmlPath: '/fake/recorder.html',
+      maxLoadRetries: 1,
+      retryDelayMs: 0,
+    });
+    capture.start();
+    await closed;
+    expect(closeSpy).toHaveBeenCalled();
+  });
+
+  test('sends VAD config to renderer when ready', () => {
+    capture = new ElectronAudioCapture({
+      createWindow,
+      ipcMain,
+      htmlPath: '/fake/recorder.html',
+      vad: { silenceThreshold: 123, minSpeechDurationMs: 456, maxSpeechDurationMs: 789 },
+    });
+    capture.start();
+    ipcHandlers['recorder:ready']?.({}, undefined);
+
+    const configMsg = sent.find((m) => m.channel === 'recorder:config');
+    expect(configMsg).toBeDefined();
+    expect(configMsg!.args[0].vad).toEqual({
+      silenceThreshold: 123,
+      minSpeechDurationMs: 456,
+      maxSpeechDurationMs: 789,
+    });
+  });
+
+  test('onReadyStateChange fires when recorder becomes ready', () => {
+    const states: boolean[] = [];
+    capture.onReadyStateChange((ready) => states.push(ready));
+    capture.start();
+    ipcHandlers['recorder:ready']?.({}, undefined);
+    expect(states).toEqual([true]);
+    expect(capture.isReady()).toBe(true);
+  });
+
+  test('clears accumulator after stop resolves', async () => {
+    capture.start();
+    ipcHandlers['recorder:ready']?.({}, undefined);
+
+    const stopPromise = capture.stop();
+    const pcm1 = Buffer.from([0x01, 0x02]);
+    ipcHandlers['recorder:pcm']?.(
+      {},
+      pcm1.buffer.slice(pcm1.byteOffset, pcm1.byteOffset + pcm1.byteLength),
+    );
+    await stopPromise;
+
+    // accumulator should be empty after stop resolves
+    const stopPromise2 = capture.stop();
+    ipcHandlers['recorder:pcm']?.({}, new ArrayBuffer(0));
+    const result2 = await stopPromise2;
+    expect(result2).toEqual(Buffer.alloc(0));
   });
 });

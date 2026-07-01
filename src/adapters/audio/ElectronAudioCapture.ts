@@ -168,6 +168,11 @@ export class ElectronAudioCapture implements AudioCapture {
     this.pcmAccumulator = Buffer.alloc(0);
   }
 
+  setVad(vad: AsrVadConfig): void {
+    this.deps.vad = vad;
+    this.sendVadConfig();
+  }
+
   start(): void {
     if (this.recording) return;
     this.ensureWindow();
