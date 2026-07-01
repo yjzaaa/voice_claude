@@ -3,6 +3,7 @@ import { ToolRegistry } from './ToolRegistry';
 import { Plan } from '../models/Plan';
 import { SkillRegistry } from './SkillRegistry';
 import { WindowRole } from '../../ports/incoming/WindowManager';
+import { PlanExecutionResult } from './PlanExecutor';
 
 /** AgentPlanner 做决策时需要的桌面上下文。 */
 export interface AgentPlannerContext {
@@ -76,6 +77,54 @@ export class AgentPlanner {
   }
 
   /**
+   * 根据前一次执行失败的上下文重新规划。
+   * @param text - 用户原始语音文本
+   * @param failedPlan - 执行失败的计划
+   * @param result - 执行结果（含失败步骤与错误信息）
+   * @param context - 当前桌面上下文
+   */
+  async replan(
+    text: string,
+    failedPlan: Plan,
+    result: PlanExecutionResult,
+    context: AgentPlannerContext,
+  ): Promise<AgentPlannerResponse> {
+    const failedStep = result.failedStep;
+    const errorMessage =
+      result.error instanceof Error ? result.error.message : String(result.error ?? 'unknown');
+
+    const req: LlmRequest = {
+      systemPrompt: this.buildSystemPrompt(),
+      userPrompt: [
+        `User said: "${text}"`,
+        '',
+        'The previous plan failed:',
+        `  Failed step: ${failedStep?.tool ?? 'unknown'}`,
+        `  Error: ${errorMessage}`,
+        '',
+        'Previous plan:',
+        JSON.stringify(failedPlan),
+        '',
+        'Please provide a corrected plan, or set isCommand=false and explain if user intervention is required.',
+        '',
+        this.buildContextLines(context),
+      ].join('\n'),
+      maxTokens: 1024,
+      temperature: 0.2,
+    };
+
+    const raw = await this.llm.complete(req);
+    if (raw == null) {
+      throw new AgentPlannerError('LLM returned null during replan');
+    }
+    const parsed = extractFirstJsonObject(raw);
+    if (!parsed) {
+      throw new AgentPlannerError('Failed to parse replan response');
+    }
+    return parsed as AgentPlannerResponse;
+  }
+
+  /**
    * 解析用户语音文本，决定是否为指令并生成计划。
    * 如果已配置 SkillRegistry 且文本匹配某个技能，直接返回该技能计划，不走 LLM。
    * @param text - ASR 识别后的文本
@@ -133,6 +182,11 @@ export class AgentPlanner {
 
   /** 构建用户提示，包含用户语音和桌面上下文。 */
   private buildUserPrompt(text: string, context: AgentPlannerContext): string {
+    return [`User said: "${text}"`, '', this.buildContextLines(context)].join('\n');
+  }
+
+  /** 构建桌面上下文描述行。 */
+  private buildContextLines(context: AgentPlannerContext): string {
     const active = context.activeWindow;
     const activeLine = active
       ? `Active window: "${active.title}" [id=${active.id}, app=${active.appName ?? 'unknown'}, role=${active.role ?? 'unknown'}]`
@@ -145,17 +199,14 @@ export class AgentPlanner {
       )
       .join('\n');
 
-    const lines = [
-      `User said: "${text}"`,
-      '',
+    return [
       'Desktop context:',
       activeLine,
       'Open windows:',
       windowLines || '  none',
       `Recent actions: ${context.recentActions.join(', ') || 'none'}`,
       `Permitted high-risk tools: ${context.riskWhitelist?.join(', ') || 'none'}`,
-    ];
-    return lines.join('\n');
+    ].join('\n');
   }
 }
 

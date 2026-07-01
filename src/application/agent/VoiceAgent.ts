@@ -122,11 +122,68 @@ export class VoiceAgent {
 
     if (result.status === 'success') {
       this.eventBus.emit('agent:success', { text, plan: classified });
-    } else {
-      this.eventBus.emit('agent:step-failed', { text, plan: classified, result });
+      this.audit.log(this.makeAuditEntry(text, response, result));
+      return;
     }
 
+    // 首次执行失败：尝试重新规划一次
     this.audit.log(this.makeAuditEntry(text, response, result));
+    this.eventBus.emit('agent:step-failed', { text, plan: classified, result });
+
+    let replanResponse: AgentPlannerResponse;
+    try {
+      replanResponse = await this.planner.replan(text, classified, result, context);
+    } catch (error) {
+      this.eventBus.emit('agent:needs-human', {
+        text,
+        plan: classified,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    if (
+      !replanResponse.isCommand ||
+      replanResponse.confidence < (this.config.confidenceThreshold ?? 0.7) ||
+      !replanResponse.plan
+    ) {
+      this.eventBus.emit('agent:needs-human', {
+        text,
+        plan: classified,
+        reason: replanResponse.reason,
+      });
+      this.audit.log(this.makeAuditEntry(text, replanResponse, { status: 'success' }));
+      return;
+    }
+
+    const replanned = this.riskClassifier.classify(replanResponse.plan, context.riskWhitelist);
+    this.eventBus.emit('agent:acting', { plan: replanned });
+
+    if (!replanned.canAutoExecute) {
+      const blockedTools = replanned.steps
+        .filter((s) => s.risk === 'high' && !context.riskWhitelist?.includes(s.tool))
+        .map((s) => s.tool);
+
+      if (blockedTools.length > 0) {
+        this.eventBus.emit('agent:permission-request', {
+          text,
+          plan: replanned,
+          tools: blockedTools,
+        });
+      } else {
+        this.eventBus.emit('agent:needs-human', { text, plan: replanned });
+      }
+      this.audit.log(this.makeAuditEntry(text, replanResponse, { status: 'success' }));
+      return;
+    }
+
+    const retryResult = await this.executor.execute(replanned);
+    if (retryResult.status === 'success') {
+      this.eventBus.emit('agent:success', { text, plan: replanned });
+    } else {
+      this.eventBus.emit('agent:needs-human', { text, plan: replanned, result: retryResult });
+    }
+    this.audit.log(this.makeAuditEntry(text, replanResponse, retryResult));
   }
 
   /** 调用 ASR 识别，失败时自动重试一次。 */

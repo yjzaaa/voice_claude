@@ -257,4 +257,79 @@ describe('VoiceAgent', () => {
     expect(transcribe).toHaveBeenCalledTimes(2);
     expect(events).toEqual(['success']);
   });
+
+  test('replan succeeds after execution failure and emits success', async () => {
+    const events: string[] = [];
+    const bus = new EventBus();
+    bus.on('agent:success', () => events.push('success'));
+    bus.on('agent:needs-human', () => events.push('needs-human'));
+
+    const response: AgentPlannerResponse = {
+      isCommand: true,
+      confidence: 0.9,
+      plan: { goal: 'send hi', steps: [{ tool: 'send_text', params: { text: 'hi' } }] },
+    };
+    const replanResponse: AgentPlannerResponse = {
+      isCommand: true,
+      confidence: 0.9,
+      plan: { goal: 'send hi retry', steps: [{ tool: 'send_text', params: { text: 'hi' } }] },
+    };
+
+    const planner = createPlanner(response);
+    jest.spyOn(planner, 'replan').mockResolvedValue(replanResponse);
+
+    const executor = new PlanExecutor(new ToolRegistry());
+    let executeCount = 0;
+    jest.spyOn(executor, 'execute').mockImplementation(async () => {
+      executeCount += 1;
+      if (executeCount === 1) {
+        return { status: 'step-failed', error: new Error('first attempt failed') };
+      }
+      return { status: 'success' };
+    });
+
+    const agent = new VoiceAgent(
+      createAsr('send hi'),
+      planner,
+      createClassifier(),
+      executor,
+      bus,
+      createAudit(),
+    );
+
+    await agent.onPcm(Buffer.from('pcm'));
+
+    expect(executeCount).toBe(2);
+    expect(events).toEqual(['success']);
+  });
+
+  test('falls back to needs-human when replan fails', async () => {
+    const events: string[] = [];
+    const bus = new EventBus();
+    bus.on('agent:needs-human', () => events.push('needs-human'));
+
+    const response: AgentPlannerResponse = {
+      isCommand: true,
+      confidence: 0.9,
+      plan: { goal: 'send hi', steps: [{ tool: 'send_text', params: { text: 'hi' } }] },
+    };
+
+    const planner = createPlanner(response);
+    jest.spyOn(planner, 'replan').mockRejectedValue(new Error('replan failed'));
+
+    const executor = createExecutor({ status: 'step-failed', error: new Error('exec failed') });
+
+    const agent = new VoiceAgent(
+      createAsr('send hi'),
+      planner,
+      createClassifier(),
+      executor,
+      bus,
+      createAudit(),
+    );
+
+    await agent.onPcm(Buffer.from('pcm'));
+
+    expect(events).toEqual(['needs-human']);
+  });
 });

@@ -164,4 +164,30 @@ describe('AgentPlanner', () => {
     expect(call.userPrompt).toContain('editor');
     expect(call.userPrompt).toContain('main.ts - voice_claude');
   });
+
+  test('replan sends previous failure context to LLM and returns a new plan', async () => {
+    const llm = createLlm(
+      JSON.stringify({
+        isCommand: true,
+        confidence: 0.9,
+        plan: { goal: 'retry send', steps: [{ tool: 'send_text', params: { text: 'hello' } }] },
+        reason: 'retry after failure',
+      }),
+    );
+    const planner = new AgentPlanner(llm, createRegistry());
+
+    const result = await planner.replan(
+      'send hello',
+      { goal: 'send hello', steps: [{ tool: 'send_text', params: { text: 'hello' } }] },
+      { status: 'step-failed', error: new Error('window closed') },
+      emptyContext,
+    );
+
+    expect(result.isCommand).toBe(true);
+    expect(result.plan?.goal).toBe('retry send');
+    const call = (llm.complete as jest.Mock).mock.calls[0][0];
+    expect(call.userPrompt).toContain('The previous plan failed');
+    expect(call.userPrompt).toContain('window closed');
+    expect(call.userPrompt).toContain('send hello');
+  });
 });
