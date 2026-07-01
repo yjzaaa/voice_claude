@@ -92,6 +92,7 @@ export class AgentPlanner {
     const failedStep = result.failedStep;
     const errorMessage =
       result.error instanceof Error ? result.error.message : String(result.error ?? 'unknown');
+    const executedSteps = result.executedSteps ?? [];
 
     const req: LlmRequest = {
       systemPrompt: this.buildSystemPrompt(),
@@ -101,6 +102,11 @@ export class AgentPlanner {
         'The previous plan failed:',
         `  Failed step: ${failedStep?.tool ?? 'unknown'}`,
         `  Error: ${errorMessage}`,
+        '',
+        'Already executed steps before the failure:',
+        executedSteps.length > 0
+          ? executedSteps.map((s) => `  - ${s.tool}: ${JSON.stringify(s.params)}`).join('\n')
+          : '  none',
         '',
         'Previous plan:',
         JSON.stringify(failedPlan),

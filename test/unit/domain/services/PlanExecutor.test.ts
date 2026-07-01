@@ -126,4 +126,76 @@ describe('PlanExecutor', () => {
 
     expect(later).not.toHaveBeenCalled();
   });
+
+  test('returns executed steps before the failed step', async () => {
+    registry.register({
+      name: 'ok',
+      description: '',
+      parameters: {},
+      risk: 'low',
+      execute: async () => {},
+    });
+    registry.register({
+      name: 'fail',
+      description: '',
+      parameters: {},
+      risk: 'low',
+      execute: async () => {
+        throw new Error('nope');
+      },
+    });
+    const executor = new PlanExecutor(registry, 1);
+    const plan: ClassifiedPlan = {
+      goal: 'record progress',
+      steps: [
+        { tool: 'ok', params: { id: 1 }, risk: 'low' },
+        { tool: 'ok', params: { id: 2 }, risk: 'low' },
+        { tool: 'fail', params: {}, risk: 'low' },
+      ],
+      canAutoExecute: true,
+    };
+
+    const result = await executor.execute(plan);
+
+    expect(result.status).toBe('step-failed');
+    expect(result.executedSteps).toEqual([
+      { tool: 'ok', params: { id: 1 }, risk: 'low' },
+      { tool: 'ok', params: { id: 2 }, risk: 'low' },
+    ]);
+  });
+
+  test('emits retry events through onRetry callback', async () => {
+    let attempts = 0;
+    registry.register({
+      name: 'flaky',
+      description: '',
+      parameters: {},
+      risk: 'low',
+      execute: async () => {
+        attempts++;
+        if (attempts < 3) throw new Error('fail');
+      },
+    });
+    const retryEvents: Array<{ attempt: number; maxRetries: number; error: unknown }> = [];
+    const executor = new PlanExecutor(registry, 3, (event) => {
+      retryEvents.push({
+        attempt: event.attempt,
+        maxRetries: event.maxRetries,
+        error: event.error,
+      });
+    });
+    const plan: ClassifiedPlan = {
+      goal: 'retry with events',
+      steps: [{ tool: 'flaky', params: {}, risk: 'low' }],
+      canAutoExecute: true,
+    };
+
+    const result = await executor.execute(plan);
+
+    expect(result.status).toBe('success');
+    expect(retryEvents).toHaveLength(2);
+    expect(retryEvents[0].attempt).toBe(1);
+    expect(retryEvents[0].maxRetries).toBe(3);
+    expect(retryEvents[1].attempt).toBe(2);
+  });
 });
